@@ -49,6 +49,12 @@ def test_crowd_narrative_has_no_numeric_modifier_field():
     assert "modifier" not in names
 
 
+def test_crowd_narrative_has_string_schema_version():
+    n = _cn()
+    assert n.schema_version == "1"
+    assert isinstance(n.schema_version, str)  # a label, never a numeric scalar
+
+
 def _nd(**overrides):
     base = dict(
         seed_id="seed_x",
@@ -155,3 +161,30 @@ def test_pack_rejects_non_string_consensus_display():
     # a numeric display value would be a firewall leak
     with pytest.raises(ContractError):
         _pack(consensus_display={"negative": 0, "neutral": "neu", "positive": "pos"})
+
+
+# --- optional voice_variants (part-006) ---
+
+
+def test_pack_accepts_valid_voice_variants():
+    p = _pack(voice_variants={"a": {1: ("x1", "x2"), 0: ("y1",), -1: ("z1", "z2")}})
+    assert p.voice_variants["a"][1] == ("x1", "x2")
+
+
+def test_pack_without_variants_defaults_empty():
+    assert _pack().voice_variants == {}
+
+
+def test_pack_rejects_variants_for_unknown_persona():
+    with pytest.raises(ContractError):
+        _pack(voice_variants={"ghost": {1: ("x",)}})
+
+
+def test_pack_rejects_empty_variant_tuple():
+    with pytest.raises(ContractError):
+        _pack(voice_variants={"a": {1: ()}})
+
+
+def test_pack_rejects_non_string_variant():
+    with pytest.raises(ContractError):
+        _pack(voice_variants={"a": {1: ("ok", 5)}})

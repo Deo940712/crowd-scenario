@@ -111,6 +111,9 @@ class CrowdNarrative:
     # per-run notes. Categorical strings only — no scalar, so still firewall-safe.
     narrator_backend: str = "deterministic"
     narrator_notes: tuple[str, ...] = field(default_factory=tuple)
+    # Categorical schema tag for forward-compatible deserialization. A string (not an
+    # int) on purpose — it is a label, never a scalar anything could sum into a decision.
+    schema_version: str = "1"
 
     def __post_init__(self) -> None:
         if self.crowd_consensus not in CONSENSUS:

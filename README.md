@@ -1,19 +1,73 @@
 # crowd-scenario
 
-A deterministic, **firewalled**, **domain-pluggable** crowd-scenario rehearsal engine.
-It *rehearses* (not predicts) how a synthetic crowd of persona archetypes might react
-to an already-decided event — each archetype in its own voice, ordered into a
-who-moves-first reaction chain — and emits a single **categorical, non-authoritative**
-crowd stance.
+> A deterministic, **firewalled**, **domain-pluggable** engine that *rehearses* how a
+> synthetic crowd would react to an already-decided event — and is **structurally unable
+> to leak a number back into your decision.**
+
+繁體中文版 → [README.zh-TW.md](README.zh-TW.md)
+
+## What it does
+
+You have already made a decision (a rate cut hit, a price hike is shipping). You want to
+*rehearse* how a crowd might react to it — not to predict the future, but to pressure-test
+your own read against a synthetic second opinion.
+
+`crowd-scenario` takes a bucketed snapshot of the situation and plays out a crowd of
+**persona archetypes** — each with its own voice and its own sensitivities — reacting to
+the event. It orders them into a **who-moves-first reaction chain** (the fast herders
+panic, the slow fundamentals cohorts wait) and emits **one categorical stance**
+(`negative | neutral | positive`) plus a readable narrative.
+
+That's it. It decides no number, recommends no action, and never writes back into your
+model. It's a **warning light**, not a steering wheel.
+
+```text
+   your situation                the engine                    what comes out
+ ┌────────────────┐   buckets   ┌──────────────────────┐      ┌───────────────────┐
+ │ discount -0.6  │────────────▶│ 10 personas react,   │─────▶│ stance: bullish   │
+ │ yield     8.5  │  (numbers   │ ordered who-moves-   │      │ + reaction-chain  │
+ │ event: rate cut│   dropped)  │ first, deterministic │      │   narrative       │
+ └────────────────┘             └──────────────────────┘      └───────────────────┘
+        raw metrics stop here ↑                        no number ever leaves ↑
+```
+
+## Why it's powerful
+
+- **The firewall is the product, and it's structural — not discipline.** The engine
+  *cannot* leak a decision-grade number, even by accident: raw metrics are dropped at the
+  door (only ordinal buckets like `"deep_discount"` get in), and the only thing it can
+  emit is a categorical label — there is literally no float field on the output for a
+  "just add 0.05" leak to live in. The contract enforces this with explicit checks that
+  even survive `python -O`.
+- **Deterministic and reproducible.** Same input → byte-identical output, forever. No
+  network, no clock, no randomness beyond a hashed seed. You can diff two runs, pin them
+  in tests, and trust that a rehearsal is repeatable.
+- **Domain-pluggable.** The engine core knows nothing about stocks. A `DomainPack`
+  supplies the personas, the axes, and the labels — so the *same* firewalled engine
+  rehearses Taiwan retail investors (`STOCK_TW`), a product launch (`PRODUCT_LAUNCH`), or
+  any crowd you can model. A bad pack can't even be constructed.
+- **LLMs allowed, but never in charge.** The categorical decision is made by the engine
+  *before* any language model runs. An optional `FusionNarrator` (2 writers + 1 judge)
+  can prettify the prose, but every model output is screened by a deterministic firewall
+  scanner, and the emitted stance is **identical** whether an LLM ran or not. The dangerous
+  part (the number) is never in the model's hands.
+- **Zero runtime dependencies.** Pure standard library. Drops into any codebase without
+  pulling a dependency tree.
+
+> **Scenario rehearsal, not a forecast.** Synthetic personas, not real opinion.
+> Not backtested. This layer produces narrative only — it decides no number,
+> influences no action, and never writes back into a decision.
+
+## How it works (one line)
+
+`make_seed` (raw metrics → bucketed, hashed seed) → `run_scenario` (personas take a
+stance, ordered into a reaction chain) → `CrowdNarrative` (one categorical stance +
+prose). Optionally, `compose_divergence` diffs the crowd against *your own* read.
 
 The engine core is domain-agnostic. A **`DomainPack`** supplies the persona roster,
 the ordinal axes, and the display labels, so the same firewalled engine can rehearse
 Taiwan retail investors (`STOCK_TW`), a product launch (`PRODUCT_LAUNCH`), or any
 other crowd you can model as a pack.
-
-> **Scenario rehearsal, not a forecast.** Synthetic personas, not real opinion.
-> Not backtested. This layer produces narrative only — it decides no number,
-> influences no action, and never writes back into a decision.
 
 ## Why "firewalled"
 
@@ -59,6 +113,10 @@ python -m crowdscenario run --domain product_launch --symbol big_feature --scena
 # let the crowd DIRECTION follow the persona majority instead of the seed hash
 python -m crowdscenario run --domain product_launch --symbol price_hike --scenario price_hike --consensus-mode aggregate
 
+# feed your OWN raw metrics (JSON) instead of a built-in demo fixture — only their
+# ordinal buckets survive into the seed; the raw numbers never cross the firewall
+python -m crowdscenario run --symbol MYETF --scenario evt --metrics '{"discount_premium": -0.6, "yield": 8.5}'
+
 # determinism check — compares the FULL artifact (consensus + narrative + persona
 # samples + seed_id), and takes --horizon / --intensity like `run` does
 python -m crowdscenario verify --symbol 0056 --scenario 0056_cut
@@ -71,7 +129,10 @@ herders lead; long → the slow, low-herding cohorts lead). `--intensity {mild,s
 widens the tail framing. `--consensus-mode {hashed,aggregate}` chooses how the crowd
 *direction* is decided — `hashed` (seed-derived, the default, byte-stable) or
 `aggregate` (the persona majority, so a majority-bear roster emits `negative` instead of
-a hash-rolled stance). Both are deterministic and scalar-free. `run`'s JSON also reports
+a hash-rolled stance). Both are deterministic and scalar-free. `--metrics '<json>'` feeds
+your own raw metrics instead of a built-in demo fixture (only their ordinal buckets reach
+the seed — raw numbers never cross the firewall); an unknown symbol with no `--metrics`
+falls back to neutral input and says so on stderr. `run`'s JSON also reports
 `consensus_mode`, `narrator_backend` / `narrator_notes`.
 
 ## Use it from Python
@@ -108,6 +169,36 @@ print(run_scenario(seed, pack=PRODUCT_LAUNCH).crowd_consensus)  # neutral vocabu
 divergence = compose_divergence(narrative, posture_from_score(0.42))
 print(divergence.divergence_bucket)               # 'LOW' | 'MEDIUM' | 'HIGH'
 ```
+
+## Feeding real data
+
+The firewall exists precisely so you *can* feed the crowd layer real, decision-grade
+numbers — a sentiment score you scraped, a live discount-to-NAV, a trailing yield —
+without any of them leaking back out. `make_seed` buckets each raw metric into an ordinal
+label and **drops the number**, so the personas only ever see `"deep_discount"`, never
+`-1.5`.
+
+The pattern is dependency injection: you supply a `fetch_metrics(symbol) -> dict` (your
+crawler / API / DB), and the engine does the rest. A runnable, offline worked example
+ships in [`examples/real_data.py`](examples/real_data.py):
+
+```python
+def fetch_metrics(symbol):        # <- your real data layer goes here
+    return {"discount_premium": -0.6, "yield": 8.5}
+
+raw = fetch_metrics("0056")       # real numbers live ONLY in this local variable...
+seed = make_seed("0056", raw, market_scenario_label="rate_cut", pack=STOCK_TW)
+# ...and are gone by here: the seed carries buckets, not numbers.
+print(run_scenario(seed, consensus_mode="aggregate").crowd_consensus)
+```
+
+```bash
+# run the shipped example (needs the package importable)
+#   PowerShell:  $env:PYTHONPATH='src'; python examples/real_data.py
+#   bash:        PYTHONPATH=src python examples/real_data.py
+```
+
+Rehearsal, not a forecast: it decides no number and writes back into no decision.
 
 ## Domains & personas
 
@@ -197,9 +288,13 @@ tests/               contract + engine invariants + narrator/fusion (offline, fa
 ## Test
 
 ```bash
-pytest -q          # engine behaviour + firewall contract invariants (both domains)
+pytest -q          # engine + firewall contracts + narrator/fusion + property-based invariants
 ruff check .       # lint
 ```
+
+The suite covers example-based tests *and* hypothesis property tests (determinism, always
+categorical output, no raw-number leak, monotonicity). Firewall contracts are additionally
+asserted under `python -O` in CI, so optimize mode can never strip them.
 
 ## Provenance
 

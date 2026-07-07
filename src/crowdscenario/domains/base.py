@@ -62,6 +62,12 @@ class DomainPack:
     # Narrative framing, per horizon/intensity. Kept on the pack so a non-finance
     # domain can phrase its own time-scale/shock wording (was engine _HORIZON_FRAME).
     horizon_frame: dict[str, str] = field(default_factory=dict)
+    # OPTIONAL per-persona, per-stance voice VARIANTS. When a persona/stance has 2+
+    # variants here, the engine deterministically picks one by the seed hash, so the
+    # same seed always yields the same line but different scenarios read differently.
+    # Empty (the default) means every persona uses its single ``voice`` line as before —
+    # so a pack that supplies no variants is byte-identical to the pre-variant engine.
+    voice_variants: dict[str, dict[int, tuple[str, ...]]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         validate_pack(self)
@@ -132,3 +138,18 @@ def validate_pack(pack: DomainPack) -> None:
     for label in pack.consensus_display.values():
         if not isinstance(label, str):
             raise ContractError("consensus_display values must be strings (no scalar)")
+
+    # Optional voice_variants: if present, every keyed persona must be in the roster and
+    # each variant list must be a non-empty tuple of non-empty strings (a numeric or
+    # empty variant would break the pick or smuggle a non-categorical value in).
+    for pid, per_stance in pack.voice_variants.items():
+        if pid not in id_set:
+            raise ContractError(f"voice_variants persona {pid!r} not in persona_ids")
+        for stance, variants in per_stance.items():
+            if not isinstance(variants, tuple) or not variants:
+                raise ContractError(f"voice_variants[{pid!r}][{stance}] must be a non-empty tuple")
+            for v in variants:
+                if not isinstance(v, str) or not v.strip():
+                    raise ContractError(
+                        f"voice_variants[{pid!r}][{stance}] entries must be non-empty strings"
+                    )

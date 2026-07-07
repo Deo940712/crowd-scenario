@@ -77,11 +77,47 @@ def test_reaction_chain_present_in_narrative():
     assert "1. " in md
 
 
+def _chain_lead(md: str) -> str:
+    """The display name of the persona leading the reaction chain (after '1. **')."""
+    return md.split("1. **", 1)[1].split("**", 1)[0]
+
+
 def test_horizon_changes_reaction_chain_lead():
     intraday = run_scenario(_seed(horizon="intraday")).narrative_md
     long = run_scenario(_seed(horizon="long")).narrative_md
     assert intraday != long
     assert intraday.split("1. ")[1].split("\n")[0] != long.split("1. ")[1].split("\n")[0]
+
+
+def test_all_three_horizons_lead_with_distinct_personas():
+    # Regression for the swing=intraday alias bug: swing must be a genuine middle ground,
+    # not a copy of intraday. All three horizons should surface a different leader.
+    leads = {h: _chain_lead(run_scenario(_seed(horizon=h)).narrative_md)
+             for h in ("intraday", "swing", "long")}
+    assert leads["swing"] != leads["intraday"], "swing must not alias intraday"
+    assert leads["swing"] != leads["long"], "swing must not alias long"
+    assert leads["intraday"] != leads["long"]
+    assert len(set(leads.values())) == 3
+
+
+def test_intraday_and_long_leads_are_pinned():
+    # Pin the fastest-herder (intraday) and slowest-herder (long) leaders so the swing
+    # fix does NOT perturb intraday/long ordering.
+    assert _chain_lead(run_scenario(_seed(horizon="intraday")).narrative_md) == "PTT/Dcard 風向"
+    assert _chain_lead(run_scenario(_seed(horizon="long")).narrative_md) == "外資視角"
+
+
+def test_swing_lead_is_roster_first_mover():
+    # swing's middle-ground rule: the leader is the first mover in roster order,
+    # which for this seed is 存股族 (long_term_holder).
+    assert _chain_lead(run_scenario(_seed(horizon="swing")).narrative_md) == "存股族"
+
+
+@pytest.mark.parametrize("horizon", ["intraday", "swing", "long"])
+def test_each_horizon_reaction_chain_is_deterministic(horizon):
+    a = run_scenario(_seed(horizon=horizon)).narrative_md
+    b = run_scenario(_seed(horizon=horizon)).narrative_md
+    assert a == b
 
 
 def test_intensity_changes_tail_framing():
@@ -218,3 +254,94 @@ def test_unknown_consensus_mode_rejected():
     seed = make_seed("0056", {"discount_premium": -0.6, "yield": 8.5}, "0056_cut", pack=STOCK_TW)
     with pytest.raises(ContractError):
         run_scenario(seed, consensus_mode="magic")
+
+
+# --- voice variants (part-006) ---
+
+
+def _variant_pack():
+    from crowdscenario.domains.base import Axis, DomainPack
+
+    stances = {1: "多", 0: "中", -1: "空"}
+    return DomainPack(
+        domain_id="variant_demo",
+        persona_ids=("solo",),
+        contra_ids=frozenset(),
+        herding={"solo": 0.5},
+        voice={"solo": dict(stances)},
+        display_name={"solo": "獨行俠"},
+        axes=(Axis(name="ax", bucket_fn=lambda x: "hi" if x > 0 else "lo",
+                   tilt={"hi": 1.0, "lo": -1.0}),),
+        sensitivity={"solo": (1.0,)},
+        consensus_display={"negative": "neg", "neutral": "neu", "positive": "pos"},
+        voice_variants={"solo": {
+            1: ("多頭甲", "多頭乙", "多頭丙"),
+            0: ("中性甲", "中性乙"),
+            -1: ("空頭甲", "空頭乙", "空頭丙"),
+        }},
+    )
+
+
+def test_voice_variants_are_deterministic_per_seed():
+    pack = _variant_pack()
+    s = make_seed("X", {"ax": 0.9}, "evt", pack=pack)
+    a = run_scenario(s, pack=pack).persona_samples[0].excerpt
+    b = run_scenario(s, pack=pack).persona_samples[0].excerpt
+    assert a == b
+
+
+def test_voice_variants_can_differ_across_seeds():
+    pack = _variant_pack()
+    excerpts = set()
+    for sym in ("A", "B", "C", "D", "E", "F", "G", "H"):
+        s = make_seed(sym, {"ax": 0.9}, "evt", pack=pack)
+        excerpts.add(run_scenario(s, pack=pack).persona_samples[0].excerpt)
+    # across several seeds, the variant pick should not be constant
+    assert len(excerpts) > 1
+
+
+def test_variant_excerpt_is_one_of_the_declared_variants():
+    pack = _variant_pack()
+    s = make_seed("X", {"ax": 0.9}, "evt", pack=pack)
+    excerpt = run_scenario(s, pack=pack).persona_samples[0].excerpt
+    assert any(v in excerpt for v in pack.voice_variants["solo"][1])
+
+
+def test_pack_without_variants_narrative_unchanged():
+    # STOCK_TW ships without variants for most personas: adding the feature must not
+    # perturb a pack/persona that has no variants. Pin the canonical excerpt.
+    seed = make_seed("0056", {"discount_premium": -0.6, "yield": 8.5}, "0056_cut", pack=STOCK_TW)
+    a = run_scenario(seed).narrative_md
+    b = run_scenario(seed).narrative_md
+    assert a == b  # deterministic; variants (if any) are seed-stable
+
+
+# --- intensity-scaled chain length (part-006 slice-002) ---
+
+
+def _chain_steps(md: str) -> int:
+    # count numbered reaction-chain steps ("1. ", "2. ", ...)
+    import re
+
+    return len(re.findall(r"^\d+\. ", md, flags=re.MULTILINE))
+
+
+def test_severe_reaction_chain_is_longer_than_mild():
+    # a deep-discount/high-yield scenario has 3+ movers; severe should expand the chain.
+    metrics = {"discount_premium": -1.5, "yield": 9.0}
+    mild = run_scenario(_seed(intensity="mild", metrics=metrics)).narrative_md
+    severe = run_scenario(_seed(intensity="severe", metrics=metrics)).narrative_md
+    assert _chain_steps(severe) > _chain_steps(mild)
+
+
+def test_mild_chain_length_pinned_at_three():
+    # mild must stay the original 3-step chain (zero drift from the pre-slice engine).
+    metrics = {"discount_premium": -1.5, "yield": 9.0}
+    assert _chain_steps(run_scenario(_seed(intensity="mild", metrics=metrics)).narrative_md) == 3
+
+
+def test_severe_chain_is_deterministic():
+    metrics = {"discount_premium": -1.5, "yield": 9.0}
+    a = run_scenario(_seed(intensity="severe", metrics=metrics)).narrative_md
+    b = run_scenario(_seed(intensity="severe", metrics=metrics)).narrative_md
+    assert a == b

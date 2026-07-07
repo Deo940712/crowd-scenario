@@ -1,7 +1,9 @@
-"""CLI behaviour: argument wiring for `run`, including --consensus-mode (part-001/slice-002).
+"""CLI behaviour: argument wiring for `run` — --consensus-mode (part-001/slice-002)
+and --metrics (part-002/slice-001).
 
 These drive the parser + command functions directly (no subprocess) and read the
-JSON that `cmd_run` prints, so they lock the CLI contract without a shell.
+JSON that `cmd_run` prints, so they lock the CLI contract without a shell (which also
+sidesteps PowerShell/bash JSON-quoting differences).
 """
 
 from __future__ import annotations
@@ -80,3 +82,88 @@ def test_verify_has_no_consensus_mode_flag():
     parser = build_parser()
     with pytest.raises(SystemExit):
         parser.parse_args(["verify", "--consensus-mode", "aggregate"])
+
+
+# --- --metrics self-service input (part-002/slice-001) -----------------------------
+
+_CUSTOM = '{"discount_premium": -1.5, "yield": 9.0}'
+
+
+def test_run_accepts_custom_metrics(capsys):
+    data = _run_json(
+        capsys,
+        ["run", "--symbol", "CUSTOM", "--scenario", "evt", "--metrics", _CUSTOM],
+    )
+    # a real rehearsal came out for a symbol that has no fixture
+    assert data["crowd_consensus"] in ("negative", "neutral", "positive")
+    assert data["seed_id"].startswith("seed_CUSTOM_")
+
+
+def test_run_metrics_override_beats_fixture(capsys):
+    # 0056 HAS a fixture; --metrics must win, producing a different seed than the fixture.
+    fixture = _run_json(capsys, ["run", "--symbol", "0056", "--scenario", "evt"])
+    override = _run_json(
+        capsys, ["run", "--symbol", "0056", "--scenario", "evt", "--metrics", _CUSTOM]
+    )
+    assert override["seed_id"] != fixture["seed_id"]
+
+
+def test_run_invalid_metrics_json_is_clean_error(capsys):
+    rc = main(["run", "--symbol", "X", "--scenario", "evt", "--metrics", "{bad json"])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "error" in err.lower()
+    assert "Traceback" not in err
+
+
+def test_run_missing_metric_is_clean_error(capsys):
+    # stock pack needs discount_premium AND yield; omit yield.
+    rc = main(
+        ["run", "--symbol", "X", "--scenario", "evt", "--metrics", '{"discount_premium": -0.6}']
+    )
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "error" in err.lower()
+    assert "Traceback" not in err
+
+
+def test_run_unknown_symbol_without_metrics_warns_but_runs(capsys):
+    rc = main(["run", "--symbol", "NOFIXTURE", "--scenario", "evt"])
+    captured = capsys.readouterr()
+    assert rc == 0
+    assert "warning" in captured.err.lower()
+    # still produced a valid artifact on stdout
+    assert json.loads(captured.out)["crowd_consensus"] in ("negative", "neutral", "positive")
+
+
+def test_run_custom_metrics_do_not_leak_raw_numbers(capsys):
+    data = _run_json(
+        capsys,
+        ["run", "--symbol", "CUSTOM", "--scenario", "evt", "--metrics", _CUSTOM],
+    )
+    blob = json.dumps(data, ensure_ascii=False)
+    # the raw input numbers must not survive into the emitted artifact
+    assert "-1.5" not in blob
+    assert "9.0" not in blob
+
+
+# --- run --sweep (part-007/slice-002) ----------------------------------------------
+
+
+def test_run_sweep_outputs_all_horizon_intensity_cells(capsys):
+    assert main(["run", "--symbol", "0056", "--scenario", "evt", "--sweep"]) == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert isinstance(rows, list)
+    cells = {(r["horizon"], r["intensity"]) for r in rows}
+    assert cells == {
+        (h, i) for h in ("intraday", "swing", "long") for i in ("mild", "severe")
+    }
+    assert len(rows) == 6
+
+
+def test_run_sweep_is_deterministic(capsys):
+    main(["run", "--symbol", "0056", "--scenario", "evt", "--sweep"])
+    a = capsys.readouterr().out
+    main(["run", "--symbol", "0056", "--scenario", "evt", "--sweep"])
+    b = capsys.readouterr().out
+    assert a == b

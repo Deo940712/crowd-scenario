@@ -164,4 +164,33 @@ STOCK_TW = DomainPack(
         "positive": "bullish",
     },
     horizon_frame={"intraday": "當日盤中", "swing": "波段", "long": "長線"},
+    # Demonstration voice variants for two high-herding, high-emotion cohorts: the engine
+    # picks one deterministically by seed hash, so two scenarios read differently while
+    # each stays reproducible. Personas without variants fall back to their single voice.
+    voice_variants={
+        "panic_retail": {
+            1: (
+                "看到大家在買、怕錯過,追高進場。",
+                "群組一直喊、深怕少賺,忍不住就跟著追。",
+                "看紅就手癢,擔心錯過波段,衝動加碼。",
+            ),
+            -1: (
+                "看到黑K就恐慌,殺在最低點。",
+                "越跌越慌、越慌越賣,砍在阿呆谷。",
+                "看到帳面縮水就睡不著,認賠了結求安心。",
+            ),
+        },
+        "ptt_dcard_trendwatch": {
+            1: (
+                "看板風向轉多,發文喊進、氣氛熱絡。",
+                "推文一片看好,鄉民開始揪團上車。",
+                "版上帶風向做多,樂觀情緒發酵。",
+            ),
+            -1: (
+                "看板一片哀嚎,風向轉空、互相勸退。",
+                "推文開始檢討,鄉民互相提醒別接刀。",
+                "版上氣氛急凍,看空文洗版。",
+            ),
+        },
+    },
 )

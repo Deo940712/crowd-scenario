@@ -4,13 +4,16 @@
     python -m crowdscenario run --symbol 0056 --scenario 升息 --horizon long --intensity severe
     python -m crowdscenario run --domain product_launch --symbol newfeature --scenario price_hike
     python -m crowdscenario run --symbol 0056 --scenario 0056_cut --consensus-mode aggregate
+    python -m crowdscenario run --symbol MYETF --scenario evt --metrics '{"yield": 8.5, ...}'
     python -m crowdscenario verify --symbol 0056 --scenario 0056_cut
 
 The engine is deterministic and reads no network — safe to run anywhere. ``--domain``
 selects which pluggable persona/axis pack to rehearse (defaults to ``stock_tw`` so the
 original commands behave identically). ``--consensus-mode`` picks how the crowd
 direction is decided: ``hashed`` (seed-derived, the default) or ``aggregate`` (the
-persona majority, so the direction follows the scenario).
+persona majority, so the direction follows the scenario). ``--metrics`` feeds your own
+raw metrics as a JSON object (overriding the built-in demo fixtures); only their ordinal
+buckets survive into the seed, so no raw number ever crosses the firewall.
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ import argparse
 import json
 import sys
 
+from crowdscenario.contracts import ContractError
 from crowdscenario.domains import DomainPack
 from crowdscenario.domains.product import PRODUCT_LAUNCH
 from crowdscenario.domains.stock_tw import STOCK_TW
@@ -55,26 +59,73 @@ _FALLBACK: dict[str, dict[str, float]] = {
 }
 
 
-def _metrics_for(domain: str, symbol: str) -> dict[str, float]:
-    return _FIXTURES.get(domain, {}).get(symbol, _FALLBACK[domain])
+def _metrics_for(
+    domain: str, symbol: str, override: dict[str, float] | None = None
+) -> dict[str, float]:
+    """Resolve the raw metrics for a run: explicit override > fixture > neutral fallback.
+
+    An ``override`` (from ``--metrics``) always wins. Otherwise a built-in demo fixture
+    is used. If neither exists, a neutral per-axis fallback is returned AND a warning is
+    printed to stderr — the CLI must never *silently* substitute made-up neutral data
+    (the library API already fails fast; only the demo CLI keeps a fallback, loudly).
+    """
+    if override is not None:
+        return override
+    fixture = _FIXTURES.get(domain, {}).get(symbol)
+    if fixture is not None:
+        return fixture
+    print(
+        f"warning: no fixture or --metrics for {symbol!r} in domain {domain!r}; "
+        "using neutral fallback (demo only)",
+        file=sys.stderr,
+    )
+    return _FALLBACK[domain]
 
 
-def cmd_run(args: argparse.Namespace) -> int:
-    pack = _DOMAINS[args.domain]
+def _parse_metrics(raw: str | None) -> dict[str, float] | None:
+    """Parse the --metrics JSON string into a metrics dict, or None if not given.
+
+    Raises ValueError with a clean message on malformed JSON or a non-object payload,
+    so the caller can report it without a traceback.
+    """
+    if raw is None:
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"--metrics is not valid JSON: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError("--metrics must be a JSON object, e.g. '{\"yield\": 8.5}'")
+    return parsed
+
+
+_SWEEP_HORIZONS = ("intraday", "swing", "long")
+_SWEEP_INTENSITIES = ("mild", "severe")
+
+
+def _build_run_dict(
+    args: argparse.Namespace,
+    pack: DomainPack,
+    override: dict[str, float] | None,
+    horizon: str,
+    intensity: str,
+) -> dict[str, object]:
+    """Run one rehearsal and shape it into the CLI's JSON dict (may raise ContractError)."""
     seed = make_seed(
         args.symbol,
-        _metrics_for(args.domain, args.symbol),
+        _metrics_for(args.domain, args.symbol, override),
         market_scenario_label=args.scenario,
         rng_seed=args.seed,
-        horizon=args.horizon,
-        intensity=args.intensity,
+        horizon=horizon,
+        intensity=intensity,
         pack=pack,
     )
     n = run_scenario(seed, pack=pack, n_personas=args.n, consensus_mode=args.consensus_mode)
-    out = {
+    return {
         "domain": pack.domain_id,
         "seed_id": n.seed_id,
         "artifact_type": n.artifact_type,
+        "schema_version": n.schema_version,
         "crowd_consensus": n.crowd_consensus,
         "consensus_display": pack.consensus_display.get(n.crowd_consensus, n.crowd_consensus),
         "consensus_mode": args.consensus_mode,
@@ -91,7 +142,26 @@ def cmd_run(args: argparse.Namespace) -> int:
             for s in n.persona_samples
         ],
     }
-    print(json.dumps(out, ensure_ascii=False, indent=2))
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    pack = _DOMAINS[args.domain]
+    try:
+        override = _parse_metrics(args.metrics)
+        if args.sweep:
+            # One rehearsal per horizon × intensity cell — a comparison grid.
+            rows = [
+                _build_run_dict(args, pack, override, h, i)
+                for h in _SWEEP_HORIZONS
+                for i in _SWEEP_INTENSITIES
+            ]
+            print(json.dumps(rows, ensure_ascii=False, indent=2))
+        else:
+            out = _build_run_dict(args, pack, override, args.horizon, args.intensity)
+            print(json.dumps(out, ensure_ascii=False, indent=2))
+    except (ValueError, ContractError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     return 0
 
 
@@ -143,6 +213,19 @@ def build_parser() -> argparse.ArgumentParser:
         default="hashed",
         help="how the crowd direction is decided: hashed (seed-derived, default) or "
         "aggregate (persona majority)",
+    )
+    p_run.add_argument(
+        "--metrics",
+        default=None,
+        help="raw metrics as a JSON object, e.g. '{\"discount_premium\": -0.6, "
+        '"yield": 8.5}\'. Overrides the built-in fixture; only the ordinal buckets '
+        "survive into the seed (raw numbers never leave make_seed).",
+    )
+    p_run.add_argument(
+        "--sweep",
+        action="store_true",
+        help="rehearse every horizon × intensity cell (3×2) and emit a JSON array grid "
+        "instead of a single object (ignores --horizon/--intensity).",
     )
     p_run.set_defaults(func=cmd_run)
 

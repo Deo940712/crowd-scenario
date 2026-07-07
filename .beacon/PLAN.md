@@ -19,7 +19,12 @@ crowd-scenario：deterministic、firewalled、domain-pluggable 的群眾情境**
 | PART | Status | Goal | Design | TODO |
 | --- | --- | --- | --- | --- |
 | part-001 | done (slices 001+002) | 共識可回應情境語義（aggregate 模式）+ CLI 接線 | `.beacon/parts/part-001/DESIGN.md` | `.beacon/done/part-001/` |
-| part-002 | planned | CLI 可輸入自訂 metrics（`--metrics`） | TBD | TBD |
+| part-002 | done (slice-001) | CLI 可輸入自訂 metrics（`--metrics`） | `.beacon/parts/part-002/DESIGN.md` | `.beacon/done/part-002/` |
+| part-003 | done (slice-001) | 修 swing 排序 = intraday 別名 bug | `.beacon/parts/part-003/DESIGN.md` | `.beacon/done/part-003/` |
+| part-004 | done (slice-001, chose B) | storylines 反事實敘事實作 | `.beacon/parts/part-004/DESIGN.md` | `.beacon/done/part-004/` |
+| part-005 | done (slice-001) | 真實資料接入 worked example + 文件 | `.beacon/parts/part-005/DESIGN.md` | `.beacon/done/part-005/` |
+| part-006 | done (slices 001+002) | 敘事多樣性（voice variants + intensity 伸縮） | `.beacon/parts/part-006/DESIGN.md` | `.beacon/done/part-006/` |
+| part-007 | done (4 slices + 1 N/A) | 雜項增強（schema_version/sweep/property/PyPI；codegraph N/A） | `.beacon/parts/part-007/DESIGN.md` | `.beacon/done/part-007/` |
 
 ## Success Criteria
 

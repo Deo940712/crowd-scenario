@@ -26,11 +26,13 @@ from crowdscenario.domains.stock_tw import STOCK_TW
 from crowdscenario.narrator.base import EngineFacts, NarratorBackend, PersonaFact
 from crowdscenario.narrator.deterministic import DeterministicNarrator
 
-# Horizon shifts WHO leads the chain: an intraday shock is dominated by the fastest
-# herders; a long-horizon rehearsal foregrounds the slow fundamentals cohorts. This is
-# domain-neutral chain-ordering weight, so it stays engine-level. The per-horizon
-# display wording lives on the pack (``pack.horizon_frame``).
-_HORIZON_LEAD = {"intraday": 1.0, "swing": 0.0, "long": -1.0}
+# Horizon shifts WHO leads the chain. Three genuinely distinct orderings (domain-neutral,
+# so this stays engine-level; the per-horizon display wording lives on ``pack.horizon_frame``):
+#   - intraday: the fastest herders lead        -> sort by herding, descending
+#   - long:     the slow fundamentals cohorts lead -> sort by herding, ascending
+#   - swing:    no cohort clearly leads (middle ground) -> keep roster order, no herding sort
+# swing is deliberately NOT a herding sort so it cannot collapse into intraday/long.
+_HORIZON_ORDER = {"intraday": "herding_desc", "swing": "roster", "long": "herding_asc"}
 _DEFAULT_FRAME = "波段"
 
 
@@ -105,48 +107,76 @@ def _stance_for(
     return 0
 
 
-def _excerpt_for(persona: str, stance: int, label: str, pack: DomainPack) -> str:
+def _pick_voice(pack: DomainPack, persona: str, stance: int, seed_hash: str) -> str:
+    """The voice line for a persona/stance, choosing a variant deterministically.
+
+    If the pack supplies ``voice_variants`` for this persona/stance, one is picked by the
+    seed hash (so the same seed always yields the same line, but different scenarios read
+    differently). Otherwise the single ``voice`` line is used — making a pack with no
+    variants byte-identical to the pre-variant engine. The per-persona hash offset keeps
+    different personas from all landing on the same variant index.
+    """
+    variants = pack.voice_variants.get(persona, {}).get(stance)
+    if variants:
+        offset = (pack.persona_ids.index(persona) * 2) % max(len(seed_hash) - 2, 1)
+        idx = int(seed_hash[offset:offset + 2] or "0", 16) % len(variants)
+        return variants[idx]
+    return pack.voice.get(persona, {}).get(stance, "條件式情境反應。")
+
+
+def _excerpt_for(persona: str, stance: int, label: str, pack: DomainPack, seed_hash: str) -> str:
     """This persona's own line for its stance under the scenario `label`."""
-    voice = pack.voice.get(persona, {}).get(stance, "條件式情境反應。")
+    voice = _pick_voice(pack, persona, stance, seed_hash)
     return f"[synthetic|{persona}] 對「{label}」:{voice}(非預測)"
 
 
 def _reaction_chain(
     samples: tuple[PersonaReaction, ...], seed: ScenarioSeed, pack: DomainPack
 ) -> str:
-    """A 2-3 step who-moves-first storyline, ordered by herding speed and horizon.
+    """A 2-3 step who-moves-first storyline, ordered by horizon.
 
-    Horizon re-weights the ordering (intraday -> fastest herders lead; long -> slow
-    fundamentals cohorts lead). Intensity widens the framing (severe -> note the tail
-    also capitulates). Pure narrative — no number is produced or consumed.
+    Horizon picks the ordering (intraday -> fastest herders lead; long -> slow
+    fundamentals cohorts lead; swing -> roster order, a genuine middle ground that leans
+    on neither speed extreme). Intensity widens the framing (severe -> note the tail also
+    capitulates). Pure narrative — no number is produced or consumed.
     """
     movers = [s for s in samples if s.stance != 0]
     frame = pack.horizon_frame.get(seed.horizon, _DEFAULT_FRAME)
     if not movers:
         return f"- 在{frame}情境下各型態普遍無感,無明顯二階反應鏈(情境偏中性)。"
-    bias = _HORIZON_LEAD.get(seed.horizon, 0.0)
-    # Stable, deterministic order: primary key is herding speed; ties break by the
-    # persona's fixed roster position so a different pack can never reorder ambiguously.
+    # Stable, deterministic base order: the persona's fixed roster position, so a
+    # different pack can never reorder ambiguously and ties always break the same way.
     order = {pid: i for i, pid in enumerate(pack.persona_ids)}
     movers.sort(key=lambda s: order.get(s.archetype_id, 0))
-    movers.sort(key=lambda s: pack.herding.get(s.archetype_id, 0.5), reverse=bias >= 0)
+    strategy = _HORIZON_ORDER.get(seed.horizon, "roster")
+    if strategy == "herding_desc":
+        movers.sort(key=lambda s: pack.herding.get(s.archetype_id, 0.5), reverse=True)
+    elif strategy == "herding_asc":
+        movers.sort(key=lambda s: pack.herding.get(s.archetype_id, 0.5))
+    # strategy == "roster": leave the roster-order sort in place (swing middle ground).
     anchors = [s for s in samples if s.stance == 0]
     severe = seed.intensity == "severe"
 
     def _line(n: int, s: PersonaReaction, verb: str) -> str:
         name = pack.display_name.get(s.archetype_id, s.archetype_id)
-        return f"{n}. **{name}** {verb} —— {pack.voice[s.archetype_id][s.stance]}"
+        voice = _pick_voice(pack, s.archetype_id, s.stance, seed.seed_hash)
+        return f"{n}. **{name}** {verb} —— {voice}"
 
     steps = [_line(1, movers[0], f"在{frame}情境最先動作")]
     if len(movers) > 1:
         steps.append(_line(2, movers[1], "跟進"))
     tail = anchors[0] if anchors else movers[-1]
+    # Severe shocks widen the middle of the chain: a third mover (when present, and not
+    # already the tail) also gets dragged in before the tail. Mild keeps the original
+    # 3-step shape exactly (zero drift).
+    if severe and len(movers) > 2 and movers[2] is not tail:
+        steps.append(_line(len(steps) + 1, movers[2], "也被帶動"))
     tail_verb = (
         "最終也跟隨"
         if (severe and tail.stance != 0)
         else ("不為所動" if tail.stance == 0 else "最後才反應")
     )
-    steps.append(_line(3, tail, tail_verb))
+    steps.append(_line(len(steps) + 1, tail, tail_verb))
     return "\n".join(steps)
 
 
@@ -196,7 +226,7 @@ def run_scenario(
             archetype_id=a,
             stance=stance,
             register="zh-TW",
-            excerpt=_excerpt_for(a, stance, label, pack),
+            excerpt=_excerpt_for(a, stance, label, pack, seed.seed_hash),
         )
 
     samples = tuple(_sample(a) for a in pack.persona_ids)
@@ -221,7 +251,7 @@ def run_scenario(
                 persona_id=s.archetype_id,
                 display_name=pack.display_name.get(s.archetype_id, s.archetype_id),
                 stance=s.stance,
-                voice_line=pack.voice[s.archetype_id][s.stance],
+                voice_line=_pick_voice(pack, s.archetype_id, s.stance, seed.seed_hash),
             )
             for s in samples
         ),
