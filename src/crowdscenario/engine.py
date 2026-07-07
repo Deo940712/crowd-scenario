@@ -1,0 +1,240 @@
+"""The Crowd Scenario Engine — a non-authoritative narrative side-rail.
+
+Reads ONLY a frozen ScenarioSeed; emits ONLY a ``CrowdNarrative`` (a categorical
+crowd stance + narrative — NO numeric modifier). It reads no raw market number and
+returns no decision-grade scalar, so it is safe to run alongside any decision
+system without ever being able to move a computed number.
+
+Rehearse (not predict) how 10 Taiwan retail investor archetypes might react to an
+already-decided market event: each archetype speaks in its own voice, reads the
+frozen ordinal context by its own sensitivity, and the whole thing is ordered into
+a who-moves-first reaction chain. Deterministic per seed.
+"""
+
+from __future__ import annotations
+
+import hashlib
+
+from crowdscenario.contracts import (
+    ContractError,
+    CrowdNarrative,
+    PersonaReaction,
+    ScenarioSeed,
+)
+from crowdscenario.domains import DomainPack
+from crowdscenario.domains.stock_tw import STOCK_TW
+from crowdscenario.narrator.base import EngineFacts, NarratorBackend, PersonaFact
+from crowdscenario.narrator.deterministic import DeterministicNarrator
+
+# Horizon shifts WHO leads the chain: an intraday shock is dominated by the fastest
+# herders; a long-horizon rehearsal foregrounds the slow fundamentals cohorts. This is
+# domain-neutral chain-ordering weight, so it stays engine-level. The per-horizon
+# display wording lives on the pack (``pack.horizon_frame``).
+_HORIZON_LEAD = {"intraday": 1.0, "swing": 0.0, "long": -1.0}
+_DEFAULT_FRAME = "波段"
+
+
+def _internal_view(seed: ScenarioSeed) -> float:
+    """Deterministic, reproducible crowd lean in [-1, +1] (internal only)."""
+    digest = hashlib.sha256(seed.seed_hash.encode("utf-8")).hexdigest()
+    return round((int(digest[:8], 16) / 0xFFFFFFFF) * 2 - 1, 4)
+
+
+def _consensus(view: float) -> str:
+    if view > 0.15:
+        return "positive"
+    if view < -0.15:
+        return "negative"
+    return "neutral"
+
+
+# consensus_mode vocabulary. "hashed" is the default legacy path (direction from the
+# seed hash); "aggregate" derives the direction from the personas themselves.
+CONSENSUS_MODES = ("hashed", "aggregate")
+
+# Net-stance threshold for aggregate mode: a clear majority (|net| > 1, i.e. at least a
+# 2-vote edge) flips the crowd; anything tighter stays neutral. Integer comparison, so
+# it is fully deterministic with no reliance on dict/set iteration order.
+_AGGREGATE_THRESHOLD = 1
+
+
+def _aggregate_consensus(stances: tuple[int, ...]) -> str:
+    """Categorical crowd consensus derived from the persona majority (deterministic).
+
+    Pure function of the integer net stance — no scalar leaves, no randomness, no
+    iteration-order dependence. ``net > 1`` -> positive, ``net < -1`` -> negative,
+    otherwise neutral.
+    """
+    net = sum(stances)
+    if net > _AGGREGATE_THRESHOLD:
+        return "positive"
+    if net < -_AGGREGATE_THRESHOLD:
+        return "negative"
+    return "neutral"
+
+
+def _stance_for(
+    persona: str, consensus: str, ordinal: dict[str, str], pack: DomainPack = STOCK_TW
+) -> int:
+    """This persona's categorical stance (-1|0|1) under ``pack``.
+
+    Baseline lean comes from the seed-derived consensus (a contra persona fades it,
+    a pro persona amplifies it). Each persona then applies its OWN reading of every
+    ordinal axis the pack defines, weighted by its per-axis sensitivity, so within one
+    scenario cohorts diverge instead of flipping in lockstep. Deterministic and
+    scalar-free: the internal lean is thresholded back to -1|0|1 before it leaves.
+    """
+    base = 0.0 if consensus == "neutral" else (1.0 if consensus == "positive" else -1.0)
+    lean = base if persona not in pack.contra_ids else -base
+
+    if ordinal:
+        weights = pack.sensitivity.get(persona, (0.0,) * len(pack.axes))
+        tilt = 0.0
+        for axis, weight in zip(pack.axes, weights, strict=True):
+            bucket = ordinal.get(axis.name)
+            if bucket is not None:
+                if bucket not in axis.tilt:
+                    raise ContractError(f"unknown bucket {bucket!r} for axis {axis.name!r}")
+                tilt += weight * axis.tilt[bucket]
+        lean += 0.9 * tilt
+
+    if lean > 0.15:
+        return 1
+    if lean < -0.15:
+        return -1
+    return 0
+
+
+def _excerpt_for(persona: str, stance: int, label: str, pack: DomainPack) -> str:
+    """This persona's own line for its stance under the scenario `label`."""
+    voice = pack.voice.get(persona, {}).get(stance, "條件式情境反應。")
+    return f"[synthetic|{persona}] 對「{label}」:{voice}(非預測)"
+
+
+def _reaction_chain(
+    samples: tuple[PersonaReaction, ...], seed: ScenarioSeed, pack: DomainPack
+) -> str:
+    """A 2-3 step who-moves-first storyline, ordered by herding speed and horizon.
+
+    Horizon re-weights the ordering (intraday -> fastest herders lead; long -> slow
+    fundamentals cohorts lead). Intensity widens the framing (severe -> note the tail
+    also capitulates). Pure narrative — no number is produced or consumed.
+    """
+    movers = [s for s in samples if s.stance != 0]
+    frame = pack.horizon_frame.get(seed.horizon, _DEFAULT_FRAME)
+    if not movers:
+        return f"- 在{frame}情境下各型態普遍無感,無明顯二階反應鏈(情境偏中性)。"
+    bias = _HORIZON_LEAD.get(seed.horizon, 0.0)
+    # Stable, deterministic order: primary key is herding speed; ties break by the
+    # persona's fixed roster position so a different pack can never reorder ambiguously.
+    order = {pid: i for i, pid in enumerate(pack.persona_ids)}
+    movers.sort(key=lambda s: order.get(s.archetype_id, 0))
+    movers.sort(key=lambda s: pack.herding.get(s.archetype_id, 0.5), reverse=bias >= 0)
+    anchors = [s for s in samples if s.stance == 0]
+    severe = seed.intensity == "severe"
+
+    def _line(n: int, s: PersonaReaction, verb: str) -> str:
+        name = pack.display_name.get(s.archetype_id, s.archetype_id)
+        return f"{n}. **{name}** {verb} —— {pack.voice[s.archetype_id][s.stance]}"
+
+    steps = [_line(1, movers[0], f"在{frame}情境最先動作")]
+    if len(movers) > 1:
+        steps.append(_line(2, movers[1], "跟進"))
+    tail = anchors[0] if anchors else movers[-1]
+    tail_verb = (
+        "最終也跟隨"
+        if (severe and tail.stance != 0)
+        else ("不為所動" if tail.stance == 0 else "最後才反應")
+    )
+    steps.append(_line(3, tail, tail_verb))
+    return "\n".join(steps)
+
+
+def run_scenario(
+    seed: ScenarioSeed,
+    pack: DomainPack = STOCK_TW,
+    n_personas: int = 30,
+    narrator: NarratorBackend | None = None,
+    consensus_mode: str = "hashed",
+) -> CrowdNarrative:
+    """Rehearse the crowd reaction for one already-decided event. Deterministic.
+
+    The categorical facts — ``crowd_consensus`` (neutral vocabulary) and every persona
+    ``stance`` — are decided HERE, firewalled, before any narrator runs. The narrator
+    only turns those fixed facts into prose; it can never change a stance or a
+    consensus. ``narrator`` defaults to ``DeterministicNarrator`` (offline, stdlib,
+    byte-identical to the original output). Pass a ``FusionNarrator`` for LLM prose;
+    the emitted ``crowd_consensus``/``persona_samples`` are unchanged regardless.
+
+    ``consensus_mode`` picks how the crowd's *direction* is decided (both deterministic,
+    both scalar-free):
+
+    - ``"hashed"`` (default): the direction comes from the seed hash — the original
+      behaviour, byte-identical. Personas still read the ordinal context individually.
+    - ``"aggregate"``: the direction is the persona **majority**. Every stance is first
+      computed against the hashed baseline (so personas keep reacting to the ordinal
+      context), then the emitted consensus is the net-sign of those stances. This makes
+      the crowd direction follow the scenario instead of the dice — e.g. a majority-bear
+      roster no longer emits a hash-rolled "positive".
+    """
+    if seed.domain_id != pack.domain_id:
+        raise ContractError(
+            f"seed domain {seed.domain_id!r} does not match pack domain {pack.domain_id!r}"
+        )
+    if consensus_mode not in CONSENSUS_MODES:
+        raise ContractError(
+            f"consensus_mode {consensus_mode!r} not in {CONSENSUS_MODES}"
+        )
+    narrator = narrator or DeterministicNarrator()
+    base_consensus = _consensus(_internal_view(seed))
+    label = seed.market_scenario_label
+    ordinal = dict(seed.ordinal_context)
+
+    def _sample(a: str) -> PersonaReaction:
+        stance = _stance_for(a, base_consensus, ordinal, pack)
+        return PersonaReaction(
+            archetype_id=a,
+            stance=stance,
+            register="zh-TW",
+            excerpt=_excerpt_for(a, stance, label, pack),
+        )
+
+    samples = tuple(_sample(a) for a in pack.persona_ids)
+    # Phase 2: pick the emitted direction. hashed keeps the seed-derived baseline;
+    # aggregate overrides it with the persona majority (samples are already decided
+    # against the hashed baseline, so this never re-runs the stance logic).
+    consensus = (
+        _aggregate_consensus(tuple(s.stance for s in samples))
+        if consensus_mode == "aggregate"
+        else base_consensus
+    )
+    chain = _reaction_chain(samples, seed, pack)
+    frame = pack.horizon_frame.get(seed.horizon, _DEFAULT_FRAME)
+    facts = EngineFacts(
+        label=label,
+        consensus=consensus,
+        consensus_display=pack.consensus_display.get(consensus, consensus),
+        frame=frame,
+        intensity_zh="劇烈" if seed.intensity == "severe" else "溫和",
+        personas=tuple(
+            PersonaFact(
+                persona_id=s.archetype_id,
+                display_name=pack.display_name.get(s.archetype_id, s.archetype_id),
+                stance=s.stance,
+                voice_line=pack.voice[s.archetype_id][s.stance],
+            )
+            for s in samples
+        ),
+        reaction_chain=chain,
+    )
+    result = narrator.render(facts)
+    return CrowdNarrative(
+        seed_id=seed.seed_id,
+        rng_seed=seed.rng_seed,
+        n_personas=n_personas,
+        crowd_consensus=consensus,
+        narrative_md=result.narrative_md,
+        persona_samples=samples,
+        narrator_backend=result.backend,
+        narrator_notes=result.notes,
+    )
