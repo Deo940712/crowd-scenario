@@ -32,7 +32,7 @@ Done gate:
 
 ### part-014-slice-002: DomainPack immutability + finite validation (domains/base.py)
 
-Status: planned
+Status: done → `.beacon/done/part-014/part-014-slice-002-done-current.md`
 
 Goal: 已驗證的 pack 不能被改壞;NaN/inf/bool 被拒;`voice_variants` stance key 限界。
 
