@@ -299,3 +299,70 @@ def test_pack_rejects_non_finite_sensitivity(bad):
 def test_pack_rejects_out_of_range_variant_stance(bad_stance):
     with pytest.raises(ContractError):
         _pack(voice_variants={"a": {bad_stance: ("x",)}})
+
+
+# --- deep immutability: a validated pack cannot be mutated back into an invalid state ---
+#
+# frozen=True only blocks rebinding attributes, not mutating the dicts they point at.
+# After validation the pack's mappings are read-only, so a lookup can never be corrupted
+# post-construction. Mutation raises TypeError (standard read-only mapping behaviour).
+
+
+def test_pack_reads_still_work_after_freeze():
+    p = _pack()
+    assert p.herding["a"] == 0.2
+    assert p.voice["a"][1] == "x"
+    assert p.axes[0].tilt["mid"] == 0.0
+
+
+def test_pack_herding_is_read_only():
+    p = _pack()
+    with pytest.raises(TypeError):
+        p.herding["a"] = 9
+
+
+def test_pack_voice_is_deep_read_only():
+    p = _pack()
+    # Item assignment is the canonical read-only proof (raises TypeError). A read-only
+    # mapping also has no ``clear`` at all (AttributeError), so mutation is impossible
+    # either way.
+    with pytest.raises(TypeError):
+        p.voice["a"][1] = "hack"
+    with pytest.raises(AttributeError):
+        p.voice["a"].clear()
+
+
+def test_pack_display_name_is_read_only():
+    p = _pack()
+    with pytest.raises(TypeError):
+        p.display_name["a"] = "X"
+
+
+def test_pack_sensitivity_is_read_only():
+    p = _pack()
+    with pytest.raises(TypeError):
+        p.sensitivity["a"] = (9,)
+
+
+def test_pack_consensus_display_is_read_only():
+    p = _pack()
+    with pytest.raises(TypeError):
+        p.consensus_display["negative"] = "n2"
+
+
+def test_pack_horizon_frame_is_read_only():
+    p = _pack(horizon_frame={"swing": "frame"})
+    with pytest.raises(TypeError):
+        p.horizon_frame["swing"] = "x"
+
+
+def test_pack_axis_tilt_is_read_only():
+    p = _pack()
+    with pytest.raises(TypeError):
+        p.axes[0].tilt["mid"] = 9
+
+
+def test_pack_voice_variants_is_deep_read_only():
+    p = _pack(voice_variants={"a": {1: ("x1", "x2")}})
+    with pytest.raises(TypeError):
+        p.voice_variants["a"][1] = ("hack",)

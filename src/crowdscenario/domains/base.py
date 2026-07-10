@@ -26,8 +26,9 @@ before it can corrupt a lookup or the seed hash.
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from types import MappingProxyType
 
 from crowdscenario.contracts import CONSENSUS, ContractError
 
@@ -53,7 +54,13 @@ class Axis:
 
     name: str
     bucket_fn: Callable[[float], str]
-    tilt: dict[str, float]
+    tilt: Mapping[str, float]
+
+    def __post_init__(self) -> None:
+        # Freeze the tilt table read-only: a frozen dataclass only blocks rebinding the
+        # attribute, not mutating the dict it points at.
+        if not isinstance(self.tilt, MappingProxyType):
+            object.__setattr__(self, "tilt", MappingProxyType(dict(self.tilt)))
 
 
 @dataclass(frozen=True)
@@ -63,24 +70,43 @@ class DomainPack:
     domain_id: str
     persona_ids: tuple[str, ...]
     contra_ids: frozenset[str]
-    herding: dict[str, float]
-    voice: dict[str, dict[int, str]]
-    display_name: dict[str, str]
+    herding: Mapping[str, float]
+    voice: Mapping[str, Mapping[int, str]]
+    display_name: Mapping[str, str]
     axes: tuple[Axis, ...]
-    sensitivity: dict[str, tuple[float, ...]]
-    consensus_display: dict[str, str]
+    sensitivity: Mapping[str, tuple[float, ...]]
+    consensus_display: Mapping[str, str]
     # Narrative framing, per horizon/intensity. Kept on the pack so a non-finance
     # domain can phrase its own time-scale/shock wording (was engine _HORIZON_FRAME).
-    horizon_frame: dict[str, str] = field(default_factory=dict)
+    horizon_frame: Mapping[str, str] = field(default_factory=dict)
     # OPTIONAL per-persona, per-stance voice VARIANTS. When a persona/stance has 2+
     # variants here, the engine deterministically picks one by the seed hash, so the
     # same seed always yields the same line but different scenarios read differently.
     # Empty (the default) means every persona uses its single ``voice`` line as before —
     # so a pack that supplies no variants is byte-identical to the pre-variant engine.
-    voice_variants: dict[str, dict[int, tuple[str, ...]]] = field(default_factory=dict)
+    voice_variants: Mapping[str, Mapping[int, tuple[str, ...]]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         validate_pack(self)
+        _freeze_pack(self)
+
+
+def _freeze_pack(pack: DomainPack) -> None:
+    """Deep-freeze every pack mapping AFTER validation, so a validated pack can never be
+    mutated back into an invalid state. A frozen dataclass only blocks rebinding the
+    attribute; the dicts it points at stay mutable without this. ``Axis.tilt`` is frozen
+    by ``Axis.__post_init__`` when each axis is constructed.
+    """
+    for attr in ("herding", "display_name", "sensitivity", "consensus_display", "horizon_frame"):
+        object.__setattr__(pack, attr, MappingProxyType(dict(getattr(pack, attr))))
+    # voice is nested one level: {persona: {stance: line}}.
+    frozen_voice = {pid: MappingProxyType(dict(stances)) for pid, stances in pack.voice.items()}
+    object.__setattr__(pack, "voice", MappingProxyType(frozen_voice))
+    # voice_variants is nested one level: {persona: {stance: (lines,)}}.
+    frozen_variants = {
+        pid: MappingProxyType(dict(per_stance)) for pid, per_stance in pack.voice_variants.items()
+    }
+    object.__setattr__(pack, "voice_variants", MappingProxyType(frozen_variants))
 
 
 def validate_pack(pack: DomainPack) -> None:
