@@ -2,15 +2,52 @@
 
 Backlog is non-executable. Promote work through PLAN, PART DESIGN, PART TODO, and CURRENT before implementation.
 
-All items below have been promoted to PART DESIGN + TODO (status: designed, not yet
-executed). See PLAN.md PARTs table. Promotion mapping:
-- backlog-001 → part-004 (storylines)
-- backlog-002 → part-003 (swing bug)
-- backlog-003 → part-006 (voice variants)
-- backlog-004 → part-005 (real-data example)
-- backlog-005 → part-007 (misc enhancements)
+Phase 1 items (001–005) are all DONE and archived. Phase 2 work is designed as
+part-008..013 (see PLAN.md). Open backlog items start at backlog-006.
 
-## Items
+## Open Items
+
+### backlog-008: HTML 報告 divergence panel + case-study 批次模式
+
+Type: idea
+Status: triage (deferred from part-011 slice-002)
+
+Summary:
+`tools/report.py` 的核心（3×2 sweep 網格）已於 part-011 slice-001 完成。兩個增強留待：
+(1) `--posture {negative,neutral,positive}` → 在報告加 divergence 區塊（bucket +
+storylines 全文）；(2) `--all-cases` 對 part-010 三案例批次產報告。皆非阻塞。
+
+Promotion required before execution:
+- PLAN update / PART DESIGN update / PART TODO SLICE / CURRENT promotion
+
+### backlog-006: 文件「沒有任何數字離開引擎」宣稱過強
+
+Type: design-debt
+Status: DONE → part-009 slice-003（兩份 README + firewall.md 宣稱精確化，archived）
+
+Summary:
+README（英+中）宣稱「no number ever leaves / 沒有任何數字離開引擎」，但 emitted
+artifacts 實際含：`rng_seed`、`n_personas`、`stance ∈ {-1,0,1}`、
+`narrative_intensity ∈ {1,2,3}`、敘事編號。真正成立的保證是「**無決策等級的可加總
+純量**（score/weight/modifier/expected return）、無原始市場數字」。應把兩份 README、
+ASCII 圖說、`engine.py`/`contracts.py` docstring 的表述統一改精確：
+- 不輸出決策等級的數值評分 / 可回寫的加權純量
+- 不輸出 price/yield/return 等原始市場數字
+- stance 等內部整數是有限集合的類別編碼，不是分數
+建議併入 part-009 slice-003（兩層安全表述）一起改，或獨立小 PART。
+
+### backlog-007: pack-defined categorical prior consensus model
+
+Type: idea
+Status: WON'T-DO (part-008 evaluation: neutral baseline did not over-neutralize; a pack
+prior is unnecessary. Reopen only if a future domain shows over-neutralization.)
+
+Summary:
+part-008 的 Design Option C：讓 DomainPack 定義類別性 prior 當 persona baseline
+（取代 hashed/neutral baseline）。語義最完整但增加 pack 複雜度與人工調參。
+是否立案取決於 part-008 的 neutral-baseline 實驗結果（若 neutral 過度中性化則評估此案）。
+
+## Archived Items (Phase 1, all DONE)
 
 ### backlog-001: NarrativeDivergence.storylines 是死欄位
 

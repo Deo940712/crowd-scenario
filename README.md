@@ -28,17 +28,25 @@ model. It's a **warning light**, not a steering wheel.
  │ yield     8.5  │  (numbers   │ ordered who-moves-   │      │ + reaction-chain  │
  │ event: rate cut│   dropped)  │ first, deterministic │      │   narrative       │
  └────────────────┘             └──────────────────────┘      └───────────────────┘
-        raw metrics stop here ↑                        no number ever leaves ↑
+        raw metrics stop here ↑                 no decision-grade scalar leaves ↑
 ```
+
+> **Precise claim.** "No number leaves" is shorthand. What the contract actually
+> guarantees is: **no decision-grade additive scalar** (score / weight / modifier /
+> expected return) and **no raw market number** (price / yield / NAV) is ever on the
+> emitted artifact. Small bounded categorical integers *do* appear — a persona `stance ∈
+> {-1,0,1}`, `narrative_intensity ∈ {1,2,3}`, ordinal list markers — but they are labels
+> from a fixed finite set, not values anything could sum into a decision.
 
 ## Why it's powerful
 
 - **The firewall is the product, and it's structural — not discipline.** The engine
-  *cannot* leak a decision-grade number, even by accident: raw metrics are dropped at the
+  *cannot* leak a decision-grade scalar, even by accident: raw metrics are dropped at the
   door (only ordinal buckets like `"deep_discount"` get in), and the only thing it can
-  emit is a categorical label — there is literally no float field on the output for a
-  "just add 0.05" leak to live in. The contract enforces this with explicit checks that
-  even survive `python -O`.
+  emit is a categorical label — there is literally no additive float field on the output
+  for a "just add 0.05" leak to live in. The contract enforces this with explicit checks
+  that even survive `python -O`. (A text scanner adds defense-in-depth for optional LLM
+  prose; the structural contract is the load-bearing guarantee.)
 - **Deterministic and reproducible.** Same input → byte-identical output, forever. No
   network, no clock, no randomness beyond a hashed seed. You can diff two runs, pin them
   in tests, and trust that a rehearsal is repeatable.
@@ -48,9 +56,10 @@ model. It's a **warning light**, not a steering wheel.
   any crowd you can model. A bad pack can't even be constructed.
 - **LLMs allowed, but never in charge.** The categorical decision is made by the engine
   *before* any language model runs. An optional `FusionNarrator` (2 writers + 1 judge)
-  can prettify the prose, but every model output is screened by a deterministic firewall
-  scanner, and the emitted stance is **identical** whether an LLM ran or not. The dangerous
-  part (the number) is never in the model's hands.
+  can prettify the prose, but every model output is screened by a deterministic scanner,
+  and the emitted stance is **identical** whether an LLM ran or not. The decision-grade
+  part (the scalar) is never in the model's hands — that guarantee is structural, not the
+  scanner's job.
 - **Zero runtime dependencies.** Pure standard library. Drops into any codebase without
   pulling a dependency tree.
 
@@ -71,24 +80,40 @@ other crowd you can model as a pack.
 
 ## Why "firewalled"
 
-The whole point is that this crowd layer **cannot** leak a decision-grade number
-into your own analysis, even by accident:
+The whole point is that this crowd layer **cannot** leak a decision-grade scalar (a
+score / weight / modifier, or a raw market number) into your own analysis, even by
+accident. Two layers, and the primary one is structural:
+
+**Layer 1 — the structural contract (the primary firewall).** Enforced by types and
+shapes; a leak is impossible *by construction*, whatever any LLM does:
 
 - **Read-side** — it reads only a frozen `ScenarioSeed` carrying *bucketed ordinal
   context* (e.g. `discount_premium -> "deep_discount"`), never a raw price/yield/metric.
 - **Write-side** — it emits only a `CrowdNarrative`: a categorical stance
-  (`negative | neutral | positive`) + narrative. There is **no numeric scalar** on
-  the artifact that anything could sum into a decision total. Each domain renders the
-  stance into its own labels for display (stock: `bullish`; product: `support`), but
-  the contract value stays the neutral vocabulary.
+  (`negative | neutral | positive`) + narrative. There is **no additive numeric scalar**
+  field on the artifact that anything could sum into a decision total. (Bounded
+  categorical integers like `stance ∈ {-1,0,1}` exist, but they are labels from a fixed
+  set, not decision weights.) Each domain renders the stance into its own display labels
+  (stock: `bullish`; product: `support`), but the contract value stays neutral vocabulary.
 - **Flag** — `non_authoritative` is hard-wired `True` and asserted in the contract.
 - **Pack-side** — a `DomainPack` can only supply *categorical* material. `validate_pack`
   refuses any pack whose parallel tables are misaligned or whose display labels are
   numeric, so a new domain cannot smuggle a scalar back in.
 
+**Layer 2 — the text scanner (defense-in-depth, not a proof).** For the optional
+`FusionNarrator`, `scan_violations` screens LLM prose for numeric market tokens and
+order/injection language (validated by an adversarial corpus covering character-splitting,
+fullwidth/homoglyph digits, Chinese numerals, and injection markers). It is a
+conservative deterministic filter, **not a complete semantic safety system**: purely
+*semantic* advice with no banned words, and encoded/obfuscated payloads, are documented
+limitations it cannot catch. That is acceptable precisely because Layer 1 still holds —
+even a semantic suggestion that slips through the prose rides on an artifact that carries
+no scalar and no raw number. See [`references/firewall.md`](references/firewall.md) for
+the full threat model.
+
 "Sentiment is auxiliary" is enforced by *what the layer is allowed to output*, not
-by remembering to be careful. Keep it categorical and it stays a warning layer by
-construction. (The contract invariants are locked by `tests/test_contracts.py`.)
+by remembering to be careful. (The contract invariants are locked by
+`tests/test_contracts.py`; the scanner by `tests/test_firewall_adversarial.py`.)
 
 ## Install
 
@@ -126,10 +151,12 @@ python -m crowdscenario verify --symbol 0056 --scenario 升息 --horizon long --
 `--domain {stock_tw,product_launch}` selects the persona/axis pack.
 `--horizon {intraday,swing,long}` shifts *who moves first* (intraday → the fastest
 herders lead; long → the slow, low-herding cohorts lead). `--intensity {mild,severe}`
-widens the tail framing. `--consensus-mode {hashed,aggregate}` chooses how the crowd
-*direction* is decided — `hashed` (seed-derived, the default, byte-stable) or
-`aggregate` (the persona majority, so a majority-bear roster emits `negative` instead of
-a hash-rolled stance). Both are deterministic and scalar-free. `--metrics '<json>'` feeds
+widens the tail framing. `--consensus-mode {hashed,aggregate,aggregate_neutral}` chooses
+how the crowd *direction* is decided — `aggregate_neutral` (**the default since 0.2.0**:
+persona majority off a neutral baseline, so the direction follows the scenario and never
+the seed hash), `hashed` (seed-derived, the pre-0.2.0 behaviour), or `aggregate` (persona
+majority off a hashed baseline). All three are deterministic and scalar-free.
+`--metrics '<json>'` feeds
 your own raw metrics instead of a built-in demo fixture (only their ordinal buckets reach
 the seed — raw numbers never cross the firewall); an unknown symbol with no `--metrics`
 falls back to neutral input and says so on stderr. `run`'s JSON also reports
@@ -200,6 +227,21 @@ print(run_scenario(seed, consensus_mode="aggregate").crowd_consensus)
 
 Rehearsal, not a forecast: it decides no number and writes back into no decision.
 
+## Case studies
+
+Three reproducible, offline case studies show what the engine is good at **and where it
+must not be trusted** — see [`case_studies/`](case_studies/README.md):
+
+- **[CASE A](case_studies/case_a_etf_discount.md)** — ETF deep discount + high yield
+  (stock_tw): the crowd leans `positive`, led by fundamentals cohorts.
+- **[CASE B](case_studies/case_b_price_hike.md)** — price hike with weak value gain
+  (product_launch): all eight cohorts oppose; a live demo of why 0.2.0 changed the default
+  (old `hashed` rolled `neutral`, the new default correctly says `negative`).
+- **[CASE C](case_studies/case_c_premium_chase.md)** — premium + low yield chase
+  (stock_tw): the crowd pours cold water on a FOMO buy (HIGH divergence from a bullish read).
+
+Each ends with a mandatory **"What this CANNOT tell us"** section — rehearsal, not forecast.
+
 ## Domains & personas
 
 A `DomainPack` is a frozen bundle of a persona roster, N ordinal axes (each with its
@@ -212,6 +254,11 @@ label mapping. Two packs ship in the box:
 - **`PRODUCT_LAUNCH`** — 8 user cohorts over three axes (`price_change`, `value_delta`,
   `switching_cost`): 嘗鮮玩家 / 免費用戶 / 重度用戶 / 精打細算族 / 品牌鐵粉 /
   競品愛好者 / 輕度用戶 / 社群風向.
+- **`SOFTWARE_MIGRATION`** — 8 ecosystem cohorts over three axes (`breaking_severity`,
+  `migration_effort`, `value_gain`), display vocabulary `resist / wait / adopt`: 嘗鮮開發者 /
+  下游套件維護者 / 企業運維 / 外掛生態作者 / 資安團隊 / 業餘使用者 / 技術風向 KOL /
+  保守團隊. Neither finance nor a consumer product — the clearest proof the engine is
+  domain-agnostic. Try: `run --domain software_migration --symbol big_rewrite --scenario v9_rewrite`.
 
 Each persona has its own voice and its own sensitivity to the ordinal context, so
 within one scenario they diverge rather than flip in lockstep. To add a domain, build
@@ -253,15 +300,23 @@ print(result.narrative_md)                       # the chosen/merged, firewall-s
 ```
 
 **Firewall guarantees for the fusion path.** A model output that contains a numeric
-market token (price / NAV / NTD / % / yield, in half- *or* full-width digits), an
-internal signal encoding (`stance=` / `score=` / `modifier=` / `weight=`), or an order
-phrase (買進/賣出/委託單 …) is **rejected, not sanitised** — the scanner
-(`crowdscenario.scan_violations`) is deterministic and offline. The fusion prompt hands
-personas their stance as words (偏空/中性/偏多), never a bare `-1/0/+1`, so a model has no
-numeric signal to echo in the first place. Any leak means that candidate is dropped; the
-safe deterministic prose is always available as the floor. The fusion path itself is not
-reproducible (LLMs drift), but the emitted `crowd_consensus` **is** — it never comes
-from a model.
+market token (price / NAV / NTD / % / yield, in half- *or* full-width digits, or Chinese
+numerals with a unit), an internal signal encoding (`stance=` / `score=` / `modifier=` /
+`weight=`), an order phrase (買進/賣出/委託單 …), or a prompt-injection marker
+(忽略前述… / ignore previous…) is **rejected, not sanitised** — the scanner
+(`crowdscenario.scan_violations`) NFKC-normalizes and de-spaces its input first, so
+split-character disguises (`買 進`, `Ｂ Ｕ Ｙ`) collapse before matching. It is
+deterministic and offline, and is validated by an adversarial corpus
+(`tests/test_firewall_adversarial.py`). The fusion prompt hands personas their stance as
+words (偏空/中性/偏多), never a bare `-1/0/+1`, so a model has no numeric signal to echo in
+the first place. Any leak means that candidate is dropped; the safe deterministic prose is
+always the floor.
+
+This scanner is **defense-in-depth, not a semantic safety proof**: purely semantic advice
+with no banned words, and encoded/obfuscated payloads, are documented limitations it does
+not catch — which is acceptable because the *structural* contract (no scalar field, no raw
+input) still holds regardless. The fusion path itself is not reproducible (LLMs drift), but
+the emitted `crowd_consensus` **is** — it never comes from a model.
 
 ## Layout
 
@@ -281,9 +336,27 @@ src/crowdscenario/
   engine.py          run_scenario — reads a pack + narrator: stance logic + reaction chain
   composer.py        compose_divergence — crowd-vs-your-own read (report time)
   cli.py             python -m crowdscenario run | verify  (--domain ...)
-references/          personas.md (roster), firewall.md (the contract)
-tests/               contract + engine invariants + narrator/fusion (offline, fakes)
+references/          personas.md (roster), firewall.md (contract + scanner threat model)
+tests/               contract + engine + narrator/fusion + property-based invariants
+  firewall_corpus/   must_reject.txt / must_allow.txt — adversarial scanner corpus
 ```
+
+## Visual report
+
+Turn a `--sweep` into a single self-contained HTML report — a 3×2 horizon×intensity grid,
+the persona distribution as colour categories (never a numeric bar — the firewall extends
+to the visual layer), and a fixed rehearsal-not-forecast disclaimer. Deterministic and
+XSS-safe (all dynamic text is HTML-escaped).
+
+```bash
+# pipe a sweep into the report generator (repo root on the path)
+#   PowerShell:  $env:PYTHONPATH="src;$PWD"
+#   bash:        export PYTHONPATH="src:$PWD"
+python -m crowdscenario run --symbol 0056 --scenario evt --sweep | \
+    python tools/report.py --out report.html
+```
+
+`tools/report.py` is stdlib-only and lives in the repo (not shipped in the wheel).
 
 ## Test
 
