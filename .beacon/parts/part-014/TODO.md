@@ -57,7 +57,7 @@ Done gate:
 
 ### part-014-slice-003: Boundary hardening (cli.py + composer.py)
 
-Status: planned
+Status: done → `.beacon/done/part-014/part-014-slice-003-done-current.md`
 
 Goal: CLI `--metrics` 與 `compose_divergence` 對非法輸入回傳一致乾淨錯誤。
 
