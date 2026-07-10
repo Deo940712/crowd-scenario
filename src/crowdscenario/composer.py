@@ -8,7 +8,7 @@ categorical bucket + intensity, never a scalar that could tilt a decision.
 
 from __future__ import annotations
 
-from crowdscenario.contracts import CrowdNarrative, NarrativeDivergence
+from crowdscenario.contracts import CONSENSUS, ContractError, CrowdNarrative, NarrativeDivergence
 
 _ORDER = {"negative": -1, "neutral": 0, "positive": 1}
 _BUCKETS = ("LOW", "MEDIUM", "HIGH")
@@ -72,6 +72,8 @@ def posture_from_score(score: float) -> str:
 
 def compose_divergence(narrative: CrowdNarrative, external_posture: str) -> NarrativeDivergence:
     """Diff the synthetic crowd stance against your own categorical posture."""
+    if external_posture not in CONSENSUS:
+        raise ContractError("external_posture out of vocabulary")
     gap = abs(_ORDER[narrative.crowd_consensus] - _ORDER[external_posture])  # 0 | 1 | 2
     bucket = _BUCKETS[gap]
     return NarrativeDivergence(

@@ -7,12 +7,15 @@ conditional (rehearsal, not advice), and never carries a numeric market token.
 
 from __future__ import annotations
 
+import pytest
+
 from crowdscenario import (
     CrowdNarrative,
     compose_divergence,
     posture_from_score,
     scan_violations,
 )
+from crowdscenario.contracts import ContractError
 
 
 def _narrative(consensus: str) -> CrowdNarrative:
@@ -54,3 +57,10 @@ def test_storylines_reachable_via_posture_from_score():
     div = compose_divergence(_narrative("negative"), posture_from_score(0.9))
     assert div.divergence_bucket == "HIGH"
     assert div.storylines
+
+
+def test_compose_divergence_rejects_out_of_vocabulary_posture():
+    # An out-of-vocabulary posture must be a clean ContractError, not a raw KeyError
+    # leaking from the internal _ORDER lookup.
+    with pytest.raises(ContractError):
+        compose_divergence(_narrative("neutral"), "sideways")
