@@ -7,7 +7,7 @@ Work plan (executor detail): `.omo/plans/structural-firewall-hardening.md`
 
 ### part-014-slice-001: Contract hardening (contracts.py)
 
-Status: planned
+Status: done → `.beacon/done/part-014/part-014-slice-001-done-current.md`
 
 Goal: 讓 `ScenarioSeed`/`PersonaReaction`/`CrowdNarrative`/`NarrativeDivergence`
 無法在 firewall 違規狀態下被建構。

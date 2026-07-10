@@ -34,6 +34,11 @@ def test_crowd_narrative_is_non_authoritative_by_default():
     assert _cn().synthetic_population is True
 
 
+def test_crowd_narrative_rejects_non_synthetic_population():
+    with pytest.raises(ContractError):
+        _cn(synthetic_population=False)
+
+
 def test_crowd_narrative_rejects_bad_consensus():
     with pytest.raises(ContractError):
         _cn(crowd_consensus="up")
@@ -70,6 +75,11 @@ def _nd(**overrides):
 
 def test_divergence_is_non_authoritative_by_default():
     assert _nd().non_authoritative is True
+
+
+def test_divergence_rejects_non_synthetic_population():
+    with pytest.raises(ContractError):
+        _nd(synthetic_population=False)
 
 
 def test_divergence_rejects_bad_bucket():

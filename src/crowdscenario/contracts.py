@@ -149,6 +149,8 @@ class CrowdNarrative:
             raise ContractError("n_personas 0 or 20..50")
         if self.non_authoritative is not True:
             raise ContractError("crowd narrative must be non-authoritative")
+        if self.synthetic_population is not True:
+            raise ContractError("crowd population must be synthetic")
 
 
 @dataclass(frozen=True)
@@ -181,3 +183,5 @@ class NarrativeDivergence:
             raise ContractError("narrative_intensity 1|2|3")
         if self.non_authoritative is not True:
             raise ContractError("divergence artifact must be non-authoritative")
+        if self.synthetic_population is not True:
+            raise ContractError("divergence artifact must be synthetic")
