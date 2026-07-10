@@ -15,6 +15,7 @@ from crowdscenario.contracts import (
     ContractError,
     CrowdNarrative,
     NarrativeDivergence,
+    PersonaReaction,
     ScenarioSeed,
 )
 from crowdscenario.domains.base import Axis, DomainPack
@@ -122,6 +123,41 @@ def test_scenario_seed_rejects_non_string_ordinal_context(bad_context):
 def test_scenario_seed_accepts_valid_ordinal_context():
     seed = ScenarioSeed("s", 42, "L", ordinal_context={"discount_premium": "deep_discount"})
     assert seed.ordinal_context["discount_premium"] == "deep_discount"
+
+
+# --- PersonaReaction: a stance is a bounded categorical label, never a free integer ---
+
+
+def test_persona_reaction_accepts_valid():
+    r = PersonaReaction("archetype_a", -1, "zh-TW", "some excerpt")
+    assert r.stance == -1
+    assert r.is_synthetic is True
+
+
+@pytest.mark.parametrize("bad_stance", [2, 999, -2, True, False])
+def test_persona_reaction_rejects_out_of_range_stance(bad_stance):
+    # True/False must be rejected too: bool is an int subclass, and True == 1 would
+    # otherwise sneak past a bare ``in (-1, 0, 1)`` check.
+    with pytest.raises(ContractError):
+        PersonaReaction("a", bad_stance, "zh-TW", "x")
+
+
+def test_persona_reaction_rejects_non_synthetic():
+    with pytest.raises(ContractError):
+        PersonaReaction("a", 0, "zh-TW", "x", is_synthetic=False)
+
+
+@pytest.mark.parametrize("kwargs", [{"archetype_id": ""}, {"register": ""}])
+def test_persona_reaction_rejects_empty_string_fields(kwargs):
+    base = dict(archetype_id="a", stance=0, register="zh-TW", excerpt="x")
+    base.update(kwargs)
+    with pytest.raises(ContractError):
+        PersonaReaction(**base)
+
+
+def test_persona_reaction_rejects_non_string_excerpt():
+    with pytest.raises(ContractError):
+        PersonaReaction("a", 0, "zh-TW", 5)
 
 
 # --- DomainPack invariants: the firewall's teeth for the pluggable layer ---

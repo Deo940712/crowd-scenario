@@ -94,6 +94,21 @@ class PersonaReaction:
     excerpt: str
     is_synthetic: bool = True
 
+    def __post_init__(self) -> None:
+        # ``stance`` is a bounded categorical label, not a free integer or a weight.
+        # Exclude bool explicitly: a bool is an int subclass and ``True in (-1, 0, 1)``
+        # is True, so True/False would otherwise slip past as a stance.
+        if isinstance(self.stance, bool) or self.stance not in (-1, 0, 1):
+            raise ContractError("stance must be -1, 0, or +1")
+        if self.is_synthetic is not True:
+            raise ContractError("persona reaction must be synthetic")
+        if not isinstance(self.archetype_id, str) or not self.archetype_id:
+            raise ContractError("archetype_id must be a non-empty string")
+        if not isinstance(self.register, str) or not self.register:
+            raise ContractError("register must be a non-empty string")
+        if not isinstance(self.excerpt, str):
+            raise ContractError("excerpt must be a string")
+
 
 @dataclass(frozen=True)
 class CrowdNarrative:
