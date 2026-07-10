@@ -50,9 +50,16 @@ def _consensus(view: float) -> str:
     return "neutral"
 
 
-# consensus_mode vocabulary. "hashed" is the default legacy path (direction from the
-# seed hash); "aggregate" derives the direction from the personas themselves.
-CONSENSUS_MODES = ("hashed", "aggregate")
+# consensus_mode vocabulary:
+#   - "hashed": direction from the seed hash (the legacy default).
+#   - "aggregate": persona majority, but personas react against the HASHED baseline
+#     (so the hash still tints the initial lean before the majority is taken).
+#   - "aggregate_neutral": EXPERIMENTAL (part-008). Personas react against a NEUTRAL
+#     baseline, so the emitted direction is a pure function of the ordinal context +
+#     per-persona sensitivity — the seed hash never touches the direction. Kept for the
+#     consensus-model evaluation; NOT the public default. Its persona_samples therefore
+#     differ from the hashed/aggregate modes (different baseline), which is expected.
+CONSENSUS_MODES = ("hashed", "aggregate", "aggregate_neutral")
 
 # Net-stance threshold for aggregate mode: a clear majority (|net| > 1, i.e. at least a
 # 2-vote edge) flips the crowd; anything tighter stays neutral. Integer comparison, so
@@ -185,7 +192,7 @@ def run_scenario(
     pack: DomainPack = STOCK_TW,
     n_personas: int = 30,
     narrator: NarratorBackend | None = None,
-    consensus_mode: str = "hashed",
+    consensus_mode: str = "aggregate_neutral",
 ) -> CrowdNarrative:
     """Rehearse the crowd reaction for one already-decided event. Deterministic.
 
@@ -196,16 +203,18 @@ def run_scenario(
     byte-identical to the original output). Pass a ``FusionNarrator`` for LLM prose;
     the emitted ``crowd_consensus``/``persona_samples`` are unchanged regardless.
 
-    ``consensus_mode`` picks how the crowd's *direction* is decided (both deterministic,
-    both scalar-free):
+    ``consensus_mode`` picks how the crowd's *direction* is decided (all deterministic,
+    all scalar-free):
 
-    - ``"hashed"`` (default): the direction comes from the seed hash — the original
-      behaviour, byte-identical. Personas still read the ordinal context individually.
-    - ``"aggregate"``: the direction is the persona **majority**. Every stance is first
-      computed against the hashed baseline (so personas keep reacting to the ordinal
-      context), then the emitted consensus is the net-sign of those stances. This makes
-      the crowd direction follow the scenario instead of the dice — e.g. a majority-bear
-      roster no longer emits a hash-rolled "positive".
+    - ``"aggregate_neutral"`` (**default since 0.2.0**): personas react off a NEUTRAL
+      baseline, then the emitted consensus is the net-sign of their stances. The direction
+      is a pure function of the ordinal context + per-persona sensitivity — the seed hash
+      never touches it. This is the most explainable and semantically consistent model
+      (see the part-008 consensus evaluation).
+    - ``"hashed"``: the direction comes from the seed hash — the original pre-0.2.0
+      behaviour, kept as an explicit option.
+    - ``"aggregate"``: the persona **majority**, but off a HASHED baseline (so the hash
+      still tints the initial lean before the majority is taken).
     """
     if seed.domain_id != pack.domain_id:
         raise ContractError(
@@ -216,12 +225,16 @@ def run_scenario(
             f"consensus_mode {consensus_mode!r} not in {CONSENSUS_MODES}"
         )
     narrator = narrator or DeterministicNarrator()
-    base_consensus = _consensus(_internal_view(seed))
+    hashed_consensus = _consensus(_internal_view(seed))
     label = seed.market_scenario_label
     ordinal = dict(seed.ordinal_context)
 
+    # The persona baseline: hashed/aggregate lean on the seed-derived consensus;
+    # aggregate_neutral deliberately starts from neutral so the hash never tints direction.
+    persona_baseline = "neutral" if consensus_mode == "aggregate_neutral" else hashed_consensus
+
     def _sample(a: str) -> PersonaReaction:
-        stance = _stance_for(a, base_consensus, ordinal, pack)
+        stance = _stance_for(a, persona_baseline, ordinal, pack)
         return PersonaReaction(
             archetype_id=a,
             stance=stance,
@@ -230,13 +243,13 @@ def run_scenario(
         )
 
     samples = tuple(_sample(a) for a in pack.persona_ids)
-    # Phase 2: pick the emitted direction. hashed keeps the seed-derived baseline;
-    # aggregate overrides it with the persona majority (samples are already decided
-    # against the hashed baseline, so this never re-runs the stance logic).
+    # Pick the emitted direction. hashed keeps the seed-derived baseline; the two
+    # aggregate modes take the persona majority (samples already decided above, so this
+    # never re-runs the stance logic).
     consensus = (
         _aggregate_consensus(tuple(s.stance for s in samples))
-        if consensus_mode == "aggregate"
-        else base_consensus
+        if consensus_mode in ("aggregate", "aggregate_neutral")
+        else hashed_consensus
     )
     chain = _reaction_chain(samples, seed, pack)
     frame = pack.horizon_frame.get(seed.horizon, _DEFAULT_FRAME)

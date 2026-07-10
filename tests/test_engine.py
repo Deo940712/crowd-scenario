@@ -14,6 +14,7 @@ from __future__ import annotations
 import pytest
 
 from crowdscenario.domains.product import PRODUCT_LAUNCH
+from crowdscenario.domains.software import SOFTWARE_MIGRATION
 from crowdscenario.domains.stock_tw import STOCK_TW
 from crowdscenario.engine import _stance_for, run_scenario
 from crowdscenario.seed import make_seed
@@ -29,6 +30,12 @@ _PACKS = [
         {"price_change": 0.3, "value_delta": -0.4, "switching_cost": 0.3},
         "newfeature",
         "price_hike",
+    ),
+    (
+        SOFTWARE_MIGRATION,
+        {"breaking_severity": 0.9, "migration_effort": 0.9, "value_gain": 0.1},
+        "big_rewrite",
+        "v9_rewrite",
     ),
 ]
 
@@ -102,15 +109,19 @@ def test_all_three_horizons_lead_with_distinct_personas():
 
 def test_intraday_and_long_leads_are_pinned():
     # Pin the fastest-herder (intraday) and slowest-herder (long) leaders so the swing
-    # fix does NOT perturb intraday/long ordering.
-    assert _chain_lead(run_scenario(_seed(horizon="intraday")).narrative_md) == "PTT/Dcard 風向"
-    assert _chain_lead(run_scenario(_seed(horizon="long")).narrative_md) == "外資視角"
+    # fix does NOT perturb intraday/long ordering. Explicit hashed mode: these leaders
+    # were captured under hashed; the default is aggregate_neutral since 0.2.0.
+    intraday = run_scenario(_seed(horizon="intraday"), consensus_mode="hashed").narrative_md
+    long = run_scenario(_seed(horizon="long"), consensus_mode="hashed").narrative_md
+    assert _chain_lead(intraday) == "PTT/Dcard 風向"
+    assert _chain_lead(long) == "外資視角"
 
 
 def test_swing_lead_is_roster_first_mover():
     # swing's middle-ground rule: the leader is the first mover in roster order,
-    # which for this seed is 存股族 (long_term_holder).
-    assert _chain_lead(run_scenario(_seed(horizon="swing")).narrative_md) == "存股族"
+    # which for this seed (hashed mode) is 存股族 (long_term_holder).
+    md = run_scenario(_seed(horizon="swing"), consensus_mode="hashed").narrative_md
+    assert _chain_lead(md) == "存股族"
 
 
 @pytest.mark.parametrize("horizon", ["intraday", "swing", "long"])
@@ -180,26 +191,71 @@ def test_different_domains_same_label_do_not_collide():
     assert stock.seed_hash != prod.seed_hash
 
 
-# --- consensus_mode: hashed (default) vs aggregate (part-001) ---
+# --- consensus_mode: aggregate_neutral (default since 0.2.0) vs explicit hashed/aggregate ---
 
 
 @pytest.mark.parametrize("pack,metrics,symbol,scenario", _PACKS)
-def test_hashed_mode_is_the_default_and_unchanged(pack, metrics, symbol, scenario):
-    # Regression lock: the default consensus_mode must reproduce the pre-aggregate
-    # behaviour byte-for-byte (same consensus + same narrative + same samples).
+def test_default_mode_is_aggregate_neutral(pack, metrics, symbol, scenario):
+    # part-013: the public default (no consensus_mode) is aggregate_neutral since 0.2.0.
+    # It must reproduce explicit aggregate_neutral byte-for-byte.
     seed = make_seed(symbol, metrics, scenario, pack=pack)
     default = run_scenario(seed, pack=pack)
-    explicit_hashed = run_scenario(seed, pack=pack, consensus_mode="hashed")
-    assert default.crowd_consensus == explicit_hashed.crowd_consensus
-    assert default.narrative_md == explicit_hashed.narrative_md
-    assert default.persona_samples == explicit_hashed.persona_samples
+    explicit = run_scenario(seed, pack=pack, consensus_mode="aggregate_neutral")
+    assert default.crowd_consensus == explicit.crowd_consensus
+    assert default.narrative_md == explicit.narrative_md
+    assert default.persona_samples == explicit.persona_samples
 
 
 def test_hashed_stock_consensus_pinned():
     # Golden value: this specific stock seed has always produced 'positive' in hashed
-    # mode. Pin it so an accidental change to the hashed path is caught.
+    # mode. Pin it so an accidental change to the hashed path is caught. (Explicit mode:
+    # the public default is aggregate_neutral since 0.2.0, so this pins hashed on purpose.)
     seed = make_seed("0056", {"discount_premium": -0.6, "yield": 8.5}, "0056_cut", pack=STOCK_TW)
-    assert run_scenario(seed).crowd_consensus == "positive"
+    assert run_scenario(seed, consensus_mode="hashed").crowd_consensus == "positive"
+
+
+# --- part-008 slice-001: lock the current default before consensus-model evaluation ---
+
+# Golden consensus for the evaluation corpus, in the CURRENT default (hashed) + current
+# aggregate. Pinned so part-008's neutral-baseline experiments cannot silently perturb the
+# two shipped modes. (scenario label is fixed to "evt" so the hashed direction is stable.)
+_EVAL_CASES = [
+    # (pack, symbol, metrics, hashed_consensus, aggregate_consensus)
+    # Values MEASURED from the current engine (not chosen) — pinned as a regression floor.
+    (STOCK_TW, "cheap_hi", {"discount_premium": -1.5, "yield": 9.0}, "positive", "positive"),
+    (STOCK_TW, "rich_lo", {"discount_premium": 1.4, "yield": 2.0}, "negative", "negative"),
+    (STOCK_TW, "fair_mid", {"discount_premium": 0.0, "yield": 4.5}, "positive", "positive"),
+    # hike_lowval is the motivating divergence: hashed rolls 'positive' but the persona
+    # majority is clearly negative (net -5). Aggregate follows the crowd; hashed does not.
+    (
+        PRODUCT_LAUNCH, "hike_lowval",
+        {"price_change": 0.4, "value_delta": -0.4, "switching_cost": 0.6},
+        "positive", "negative",
+    ),
+    (
+        PRODUCT_LAUNCH, "value_flat",
+        {"price_change": 0.0, "value_delta": 0.8, "switching_cost": 0.2},
+        "negative", "neutral",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "pack,symbol,metrics,hashed_c,agg_c", _EVAL_CASES, ids=[c[1] for c in _EVAL_CASES]
+)
+def test_current_modes_pinned_for_evaluation_corpus(pack, symbol, metrics, hashed_c, agg_c):
+    seed = make_seed(symbol, metrics, "evt", pack=pack)
+    assert run_scenario(seed, pack=pack, consensus_mode="hashed").crowd_consensus == hashed_c
+    assert run_scenario(seed, pack=pack, consensus_mode="aggregate").crowd_consensus == agg_c
+
+
+def test_default_is_aggregate_neutral_pinned():
+    # Explicit record: the public default (no consensus_mode) is aggregate_neutral (0.2.0).
+    seed = make_seed("cheap_hi", {"discount_premium": -1.5, "yield": 9.0}, "evt", pack=STOCK_TW)
+    assert (
+        run_scenario(seed).crowd_consensus
+        == run_scenario(seed, consensus_mode="aggregate_neutral").crowd_consensus
+    )
 
 
 def test_aggregate_consensus_follows_persona_majority():
@@ -254,6 +310,85 @@ def test_unknown_consensus_mode_rejected():
     seed = make_seed("0056", {"discount_premium": -0.6, "yield": 8.5}, "0056_cut", pack=STOCK_TW)
     with pytest.raises(ContractError):
         run_scenario(seed, consensus_mode="magic")
+
+
+# --- part-008 slice-002: experimental aggregate_neutral mode ---
+
+
+@pytest.mark.parametrize("pack,metrics,symbol,scenario", _PACKS)
+def test_neutral_baseline_aggregate_is_deterministic(pack, metrics, symbol, scenario):
+    seed_a = make_seed(symbol, metrics, scenario, pack=pack)
+    seed_b = make_seed(symbol, metrics, scenario, pack=pack)
+    a = run_scenario(seed_a, pack=pack, consensus_mode="aggregate_neutral")
+    b = run_scenario(seed_b, pack=pack, consensus_mode="aggregate_neutral")
+    assert a.crowd_consensus == b.crowd_consensus
+    assert a.persona_samples == b.persona_samples
+    assert a.narrative_md == b.narrative_md
+
+
+def test_neutral_baseline_ignores_hashed_direction():
+    # The whole point of aggregate_neutral: the emitted direction is a pure function of
+    # the ordinal context, so changing ONLY the scenario label (which changes the seed
+    # hash, hence the hashed direction) must NOT change the neutral-baseline consensus.
+    metrics = {"discount_premium": -1.5, "yield": 9.0}
+    seed_a = make_seed("t", metrics, "evtA", pack=STOCK_TW)
+    seed_b = make_seed("t", metrics, "evtB", pack=STOCK_TW)
+    a = run_scenario(seed_a, consensus_mode="aggregate_neutral")
+    b = run_scenario(seed_b, consensus_mode="aggregate_neutral")
+    assert a.crowd_consensus == b.crowd_consensus
+
+
+def test_neutral_baseline_neutral_scenario_stays_neutral():
+    # Semantic stability: a genuinely mid/fair scenario should not be pushed to an
+    # extreme by a hash roll — neutral baseline keeps it neutral.
+    seed = make_seed("fair", {"discount_premium": 0.0, "yield": 4.5}, "evt", pack=STOCK_TW)
+    assert run_scenario(seed, consensus_mode="aggregate_neutral").crowd_consensus == "neutral"
+
+
+@pytest.mark.parametrize("pack,metrics,symbol,scenario", _PACKS)
+def test_neutral_baseline_matches_net_sign_rule(pack, metrics, symbol, scenario):
+    seed = make_seed(symbol, metrics, scenario, pack=pack)
+    result = run_scenario(seed, pack=pack, consensus_mode="aggregate_neutral")
+    net = sum(s.stance for s in result.persona_samples)
+    expected = "positive" if net > 1 else ("negative" if net < -1 else "neutral")
+    assert result.crowd_consensus == expected
+
+
+# --- software_migration pack (part-012): a third, non-finance domain ---
+
+
+def test_software_pack_semantic_sanity_resist():
+    # rewrite-level breaking + painful migration + negligible value -> the ecosystem resists.
+    seed = make_seed(
+        "big_rewrite",
+        {"breaking_severity": 0.95, "migration_effort": 0.9, "value_gain": 0.05},
+        "v9_rewrite",
+        pack=SOFTWARE_MIGRATION,
+    )
+    result = run_scenario(seed, pack=SOFTWARE_MIGRATION)
+    assert result.crowd_consensus == "negative"
+    assert SOFTWARE_MIGRATION.consensus_display[result.crowd_consensus] == "resist"
+
+
+def test_software_pack_semantic_sanity_adopt():
+    # minor breaking + automated migration + substantial value -> the ecosystem adopts.
+    seed = make_seed(
+        "smooth_major",
+        {"breaking_severity": 0.3, "migration_effort": 0.1, "value_gain": 0.7},
+        "v9_smooth",
+        pack=SOFTWARE_MIGRATION,
+    )
+    result = run_scenario(seed, pack=SOFTWARE_MIGRATION)
+    assert result.crowd_consensus == "positive"
+    assert SOFTWARE_MIGRATION.consensus_display[result.crowd_consensus] == "adopt"
+
+
+def test_software_pack_display_vocabulary():
+    assert SOFTWARE_MIGRATION.consensus_display == {
+        "negative": "resist",
+        "neutral": "wait",
+        "positive": "adopt",
+    }
 
 
 # --- voice variants (part-006) ---
