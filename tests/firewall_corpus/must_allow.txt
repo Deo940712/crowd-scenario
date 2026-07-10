@@ -1,0 +1,25 @@
+# Firewall adversarial corpus — MUST ALLOW (scan_violations must be empty).
+# Legitimate conditional rehearsal prose that must NOT be flagged (T7: false-positive
+# guard). The two packs' full voice sets are added dynamically by the test; this file
+# holds hand-written phrasings that stress the scanner's boundaries without violating.
+
+# --- conditional persona wording (the core allowed style) ---
+若這類人格可能傾向續抱不動，氣氛熱絡。
+這類情況下，某些型態可能想趁機加碼撿便宜。
+看板風向轉多、互相勸退。
+在波段情境下各型態普遍無感，情境偏中性。
+
+# --- degree adverbs that LOOK numeric but carry no metric ---
+這一版本讓人十分看好後續發展。
+討論度不高，多數人先觀望。
+社群氣氛一面倒地保守。
+
+# --- compounds that contain 加碼/停損/出貨 as description, not an order ---
+越跌越買、當作打折，扣款照舊不停扣。
+趁人氣高調節持股，先落袋為安。
+怕連續下跌被複利吃掉，快速停損出場。
+
+# --- ordinal list markers and stance words (allowed, not metrics) ---
+1. 存股族最先動作
+偏空 / 中性 / 偏多 三種立場已定
+以下為各型態的二階反應鏈

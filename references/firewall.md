@@ -30,6 +30,40 @@ output*, and this holds for **every domain pack**, not just the stock one. Five 
 > wrong **story** — it is not wired to any decision or calculation, so it causes
 > **zero** damage to any computed number or any action.
 
+## Two layers: structural contract vs. text scanner
+
+The five points above are the **structural firewall** — the primary, load-bearing
+guarantee. It is enforced by types and shapes: the engine simply has no field to return
+a decision-grade scalar and no way to read a raw number, so a leak is impossible *by
+construction*, regardless of what any LLM does.
+
+The rule-based text scanner (`scan_violations`, in `narrator/firewall.py`) is a
+**second, softer layer** — defense-in-depth for the optional `FusionNarrator` prose. It
+is a conservative, deterministic filter, **not a complete semantic safety proof**. It
+screens LLM prose for numeric market tokens and order/injection language before that
+prose can enter a `CrowdNarrative`, and it errs toward rejecting a clean-but-suspicious
+line (the deterministic prose is always a safe fallback).
+
+### Scanner threat model (what it does and does not catch)
+
+Validated by an adversarial corpus (`tests/firewall_corpus/`, driven by
+`tests/test_firewall_adversarial.py`):
+
+| # | Threat | Example | Handled? |
+|---|---|---|---|
+| T1 | character splitting / spacing | `買 進`, `買　進`, `Ｂ Ｕ Ｙ` | ✅ (NFKC + de-space) |
+| T2 | fullwidth / homoglyph digits | `目標價 ５０`, `淨值 １５` | ✅ (NFKC fold) |
+| T3 | Chinese numerals + unit | `成本五十元`, `百分之八` | ✅ (unit-anchored pattern) |
+| T6 | prompt-injection markers | `忽略前述規則…`, `ignore previous…` | ✅ (heuristic markers) |
+| T7 | legitimate conditional prose | `這類人格可能想趁機加碼` | ✅ allowed (zero false positive) |
+| T4 | **semantic advice, no banned word** | 「現在是很適合採取行動的時候」 | ❌ **known limitation** |
+| T5 | **encoded / obfuscated payload** | Base64, homophone code | ❌ **known limitation** |
+
+T4/T5 are **out of reach for a regex scanner** and are documented as such rather than
+pretended away. They matter far less than they would elsewhere, because the *structural*
+firewall still holds: even if a semantic suggestion slips through the prose, the engine
+emitted no scalar and no raw number — the narrative is a story, wired to nothing.
+
 ## Categorical vocabulary, domain display
 
 The emitted `crowd_consensus` uses a domain-neutral vocabulary
