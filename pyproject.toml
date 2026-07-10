@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "crowd-scenario"
-version = "0.1.0"
+version = "0.2.0"
 description = "A deterministic, firewalled, domain-pluggable crowd-scenario rehearsal engine (persona packs: Taiwan retail investors, product launch, or your own)."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -36,5 +36,5 @@ target-version = "py310"
 select = ["E", "F", "I", "B", "UP"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 testpaths = ["tests"]

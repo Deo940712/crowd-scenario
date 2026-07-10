@@ -27,6 +27,7 @@ from crowdscenario.contracts import (
 )
 from crowdscenario.domains import Axis, DomainPack, validate_pack
 from crowdscenario.domains.product import PRODUCT_LAUNCH
+from crowdscenario.domains.software import SOFTWARE_MIGRATION
 from crowdscenario.domains.stock_tw import STOCK_TW
 from crowdscenario.engine import run_scenario
 from crowdscenario.narrator import (
@@ -55,6 +56,7 @@ __all__ = [
     "validate_pack",
     "STOCK_TW",
     "PRODUCT_LAUNCH",
+    "SOFTWARE_MIGRATION",
     "DeterministicNarrator",
     "FusionNarrator",
     "NarratorBackend",
@@ -68,4 +70,4 @@ __all__ = [
     "make_seed",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
