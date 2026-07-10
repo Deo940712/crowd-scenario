@@ -65,6 +65,18 @@ class ScenarioSeed:
             raise ContractError("horizon out of vocabulary")
         if self.intensity not in INTENSITIES:
             raise ContractError("intensity out of vocabulary")
+        # Ordinal buckets only: every key AND value must be a non-empty string. This is
+        # the read-side firewall's teeth — a raw number (price/yield/nav) or an empty
+        # label can never ride into the engine, even via a direct constructor call.
+        # ``isinstance(x, str)`` also excludes bool/int/float (a bool is an int subclass,
+        # and neither is a str), so a numeric value is rejected here.
+        for key, value in self.ordinal_context.items():
+            if not isinstance(key, str) or not key:
+                raise ContractError("ordinal_context keys must be non-empty strings")
+            if not isinstance(value, str) or not value:
+                raise ContractError(
+                    "ordinal_context values must be non-empty strings (ordinal buckets only)"
+                )
         # Deep-freeze the ordinal map: a frozen dataclass only stops rebinding the
         # attribute, not mutating the dict it points at. Wrapping it read-only closes
         # the "seed.ordinal_context['yield'] = ...' after construction" hole.

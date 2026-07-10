@@ -94,6 +94,36 @@ def test_scenario_seed_rejects_bad_horizon_intensity():
         ScenarioSeed("s", 42, "L", intensity="nuclear")
 
 
+# --- ScenarioSeed.ordinal_context: only ordinal STRINGS may cross the firewall ---
+#
+# The read-side contract exists so a raw price/yield can never ride into the engine.
+# make_seed produces str->str buckets, but a direct constructor call must not be able
+# to smuggle a number (or an empty label) past the door.
+
+
+@pytest.mark.parametrize(
+    "bad_context",
+    [
+        {"raw_price": 123.45},   # float value = raw number leak
+        {"count": 7},            # int value
+        {"flag": True},          # bool value (a bool is an int subclass)
+        {"discount": ""},        # empty-string value is not a real bucket
+        {"nested": {"a": "b"}},  # dict value
+        {"listy": ["a"]},        # list value
+        {5: "deep_discount"},    # non-string key
+        {"": "deep_discount"},   # empty-string key
+    ],
+)
+def test_scenario_seed_rejects_non_string_ordinal_context(bad_context):
+    with pytest.raises(ContractError):
+        ScenarioSeed("s", 42, "L", ordinal_context=bad_context)
+
+
+def test_scenario_seed_accepts_valid_ordinal_context():
+    seed = ScenarioSeed("s", 42, "L", ordinal_context={"discount_premium": "deep_discount"})
+    assert seed.ordinal_context["discount_premium"] == "deep_discount"
+
+
 # --- DomainPack invariants: the firewall's teeth for the pluggable layer ---
 #
 # validate_pack runs in __post_init__, so an invalid pack cannot even be constructed.
