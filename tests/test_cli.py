@@ -24,11 +24,11 @@ def _run_json(capsys, argv: list[str]) -> dict:
 # --- --consensus-mode wiring -------------------------------------------------------
 
 
-def test_run_defaults_to_hashed_mode(capsys):
+def test_run_defaults_to_aggregate_neutral_mode(capsys):
+    # part-013: the public default is aggregate_neutral since 0.2.0.
     data = _run_json(capsys, ["run", "--symbol", "0056", "--scenario", "0056_cut"])
-    assert data["consensus_mode"] == "hashed"
-    # hashed default for this fixture has always been positive
-    assert data["crowd_consensus"] == "positive"
+    assert data["consensus_mode"] == "aggregate_neutral"
+    assert data["crowd_consensus"] in ("negative", "neutral", "positive")
 
 
 def test_run_accepts_explicit_hashed(capsys):
@@ -167,3 +167,75 @@ def test_run_sweep_is_deterministic(capsys):
     main(["run", "--symbol", "0056", "--scenario", "evt", "--sweep"])
     b = capsys.readouterr().out
     assert a == b
+
+
+# --- software_migration domain via CLI (part-012/slice-002) ------------------------
+
+
+def test_run_software_migration_domain(capsys):
+    data = _run_json(
+        capsys,
+        ["run", "--domain", "software_migration", "--symbol", "big_rewrite",
+         "--scenario", "v9_rewrite"],
+    )
+    assert data["domain"] == "software_migration"
+    assert data["consensus_display"] in ("resist", "wait", "adopt")
+
+
+def test_run_software_migration_sweep(capsys):
+    assert main([
+        "run", "--domain", "software_migration", "--symbol", "big_rewrite",
+        "--scenario", "v9_rewrite", "--sweep",
+    ]) == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert len(rows) == 6
+    assert all(r["domain"] == "software_migration" for r in rows)
+
+
+# --- --metrics value validation (part-014/slice-003) -------------------------------
+#
+# json.loads accepts NaN/Infinity as float literals, and a string/bool value would only
+# blow up deep inside a bucket_fn with a raw TypeError traceback. _parse_metrics must
+# reject any non-finite / non-numeric value up front with a clean exit-2 error.
+
+
+def _bad_metrics_is_clean_error(capsys, metrics: str) -> None:
+    rc = main(["run", "--symbol", "X", "--scenario", "evt", "--metrics", metrics])
+    captured = capsys.readouterr()
+    assert rc == 2
+    assert captured.err.lower().startswith("error")
+    assert "Traceback" not in captured.err
+    assert captured.out == ""
+
+
+def test_run_string_metric_value_is_clean_error(capsys):
+    _bad_metrics_is_clean_error(capsys, '{"discount_premium": "bad", "yield": 8.5}')
+
+
+def test_run_null_metric_value_is_clean_error(capsys):
+    _bad_metrics_is_clean_error(capsys, '{"discount_premium": null, "yield": 8.5}')
+
+
+def test_run_bool_metric_value_is_clean_error(capsys):
+    _bad_metrics_is_clean_error(capsys, '{"discount_premium": true, "yield": 8.5}')
+
+
+def test_run_nan_metric_value_is_clean_error(capsys):
+    _bad_metrics_is_clean_error(capsys, '{"discount_premium": NaN, "yield": 8.5}')
+
+
+def test_run_infinity_metric_value_is_clean_error(capsys):
+    _bad_metrics_is_clean_error(capsys, '{"discount_premium": Infinity, "yield": 8.5}')
+
+
+def test_run_array_metrics_payload_is_clean_error(capsys):
+    _bad_metrics_is_clean_error(capsys, '[1, 2, 3]')
+
+
+def test_run_valid_numeric_metrics_still_work(capsys):
+    data = _run_json(
+        capsys,
+        ["run", "--symbol", "X", "--scenario", "evt",
+         "--metrics", '{"discount_premium": -0.6, "yield": 8.5}'],
+    )
+    assert data["crowd_consensus"] in ("negative", "neutral", "positive")

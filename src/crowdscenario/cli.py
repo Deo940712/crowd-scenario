@@ -20,11 +20,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 
 from crowdscenario.contracts import ContractError
 from crowdscenario.domains import DomainPack
 from crowdscenario.domains.product import PRODUCT_LAUNCH
+from crowdscenario.domains.software import SOFTWARE_MIGRATION
 from crowdscenario.domains.stock_tw import STOCK_TW
 from crowdscenario.engine import run_scenario
 from crowdscenario.seed import make_seed
@@ -34,6 +36,7 @@ from crowdscenario.seed import make_seed
 _DOMAINS: dict[str, DomainPack] = {
     "stock_tw": STOCK_TW,
     "product_launch": PRODUCT_LAUNCH,
+    "software_migration": SOFTWARE_MIGRATION,
 }
 
 # Tiny built-in fixtures per domain so the CLI runs with zero setup. These are
@@ -50,12 +53,19 @@ _FIXTURES: dict[str, dict[str, dict[str, float]]] = {
         "big_feature": {"price_change": 0.0, "value_delta": 0.7, "switching_cost": 0.5},
         "redesign": {"price_change": 0.0, "value_delta": -0.4, "switching_cost": 0.6},
     },
+    "software_migration": {
+        # abstract archetypal rollouts — NOT any real project.
+        "big_rewrite": {"breaking_severity": 0.95, "migration_effort": 0.9, "value_gain": 0.05},
+        "smooth_major": {"breaking_severity": 0.3, "migration_effort": 0.1, "value_gain": 0.7},
+        "risky_major": {"breaking_severity": 0.7, "migration_effort": 0.6, "value_gain": 0.4},
+    },
 }
 
 # Per-domain fallback when a symbol has no fixture: a neutral mid-point for each axis.
 _FALLBACK: dict[str, dict[str, float]] = {
     "stock_tw": {"discount_premium": 0.0, "yield": 4.0},
     "product_launch": {"price_change": 0.0, "value_delta": 0.0, "switching_cost": 0.5},
+    "software_migration": {"breaking_severity": 0.4, "migration_effort": 0.4, "value_gain": 0.4},
 }
 
 
@@ -85,8 +95,11 @@ def _metrics_for(
 def _parse_metrics(raw: str | None) -> dict[str, float] | None:
     """Parse the --metrics JSON string into a metrics dict, or None if not given.
 
-    Raises ValueError with a clean message on malformed JSON or a non-object payload,
-    so the caller can report it without a traceback.
+    Raises ValueError with a clean message on malformed JSON, a non-object payload, or a
+    non-numeric/non-finite value, so the caller can report it without a traceback. Values
+    must be finite numbers: ``json.loads`` accepts ``NaN``/``Infinity`` literals and a
+    string/bool value would otherwise blow up deep inside a bucket_fn with a raw
+    ``TypeError``. Validated values are normalised to ``float``.
     """
     if raw is None:
         return None
@@ -96,7 +109,15 @@ def _parse_metrics(raw: str | None) -> dict[str, float] | None:
         raise ValueError(f"--metrics is not valid JSON: {exc}") from exc
     if not isinstance(parsed, dict):
         raise ValueError("--metrics must be a JSON object, e.g. '{\"yield\": 8.5}'")
-    return parsed
+    metrics: dict[str, float] = {}
+    for key, value in parsed.items():
+        # Exclude bool explicitly (a bool is an int subclass) and reject NaN/inf.
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(
+            value
+        ):
+            raise ValueError(f"--metrics value for {key!r} must be a finite number")
+        metrics[key] = float(value)
+    return metrics
 
 
 _SWEEP_HORIZONS = ("intraday", "swing", "long")
@@ -209,10 +230,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--intensity", choices=["mild", "severe"], default="mild")
     p_run.add_argument(
         "--consensus-mode",
-        choices=["hashed", "aggregate"],
-        default="hashed",
-        help="how the crowd direction is decided: hashed (seed-derived, default) or "
-        "aggregate (persona majority)",
+        choices=["hashed", "aggregate", "aggregate_neutral"],
+        default="aggregate_neutral",
+        help="how the crowd direction is decided: aggregate_neutral (default since 0.2.0 "
+        "— persona majority off a neutral baseline, independent of the seed hash), "
+        "hashed (seed-derived, the pre-0.2.0 behaviour), or aggregate (persona majority "
+        "off a hashed baseline)",
     )
     p_run.add_argument(
         "--metrics",
