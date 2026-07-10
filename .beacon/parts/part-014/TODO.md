@@ -81,7 +81,7 @@ Done gate:
 
 ### part-014-slice-004: Full verification + docs calibration
 
-Status: planned
+Status: done → `.beacon/done/part-014/verification-report.md`
 
 Goal: 全面驗證 + 文件校準 + 歸檔 part-014。
 

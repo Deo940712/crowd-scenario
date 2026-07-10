@@ -52,7 +52,7 @@ crowd-scenario：deterministic、firewalled、domain-pluggable 的群眾情境**
 
 | 優先 | PART | Status | Goal | Design | TODO |
 | --- | --- | --- | --- | --- | --- |
-| P1 | part-014 | in-progress (slice-001 active) | 補強公開契約與 DomainPack，使 firewall 違規物件無法建構/被改壞（規劃+雙路審查：`.omo/plans/structural-firewall-hardening.md`） | `.beacon/parts/part-014/DESIGN.md` | `.beacon/parts/part-014/TODO.md` |
+| P1 | part-014 | done (4 slices) | 補強公開契約與 DomainPack，使 firewall 違規物件無法建構/被改壞（規劃+雙路審查：`.omo/plans/structural-firewall-hardening.md`） | `.beacon/parts/part-014/DESIGN.md` | `.beacon/done/part-014/` |
 
 ## Success Criteria（Phase 2）
 
