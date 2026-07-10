@@ -25,10 +25,20 @@ before it can corrupt a lookup or the seed hash.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from crowdscenario.contracts import CONSENSUS, ContractError
+
+
+def _is_finite_number(value: object) -> bool:
+    """True for a real finite int/float. Rejects bool (an int subclass) and NaN/inf.
+
+    tilt/herding/sensitivity are internal ordering/threshold floats; a NaN would silently
+    corrupt sorting and stance math, and a bool is not a real weight.
+    """
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
 @dataclass(frozen=True)
@@ -125,13 +135,24 @@ def validate_pack(pack: DomainPack) -> None:
         raise ContractError("axis names must be unique")
     for ax in pack.axes:
         for bucket_val in ax.tilt.values():
-            if not isinstance(bucket_val, (int, float)) or isinstance(bucket_val, bool):
-                raise ContractError(f"axis {ax.name!r} tilt values must be numeric")
+            if not _is_finite_number(bucket_val):
+                raise ContractError(
+                    f"axis {ax.name!r} tilt values must be finite numbers (no bool/NaN/inf)"
+                )
+
+    for pid, hval in pack.herding.items():
+        if not _is_finite_number(hval):
+            raise ContractError(f"herding[{pid!r}] must be a finite number (no bool/NaN/inf)")
 
     n_axes = len(pack.axes)
     for pid, weights in pack.sensitivity.items():
         if len(weights) != n_axes:
             raise ContractError(f"sensitivity[{pid!r}] must have one weight per axis")
+        for w in weights:
+            if not _is_finite_number(w):
+                raise ContractError(
+                    f"sensitivity[{pid!r}] weights must be finite numbers (no bool/NaN/inf)"
+                )
 
     if set(pack.consensus_display.keys()) != set(CONSENSUS):
         raise ContractError("consensus_display must cover exactly the CONSENSUS vocabulary")
@@ -146,6 +167,8 @@ def validate_pack(pack: DomainPack) -> None:
         if pid not in id_set:
             raise ContractError(f"voice_variants persona {pid!r} not in persona_ids")
         for stance, variants in per_stance.items():
+            if isinstance(stance, bool) or stance not in (-1, 0, 1):
+                raise ContractError(f"voice_variants[{pid!r}] stance keys must be -1|0|1")
             if not isinstance(variants, tuple) or not variants:
                 raise ContractError(f"voice_variants[{pid!r}][{stance}] must be a non-empty tuple")
             for v in variants:

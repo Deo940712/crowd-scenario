@@ -264,3 +264,38 @@ def test_pack_rejects_empty_variant_tuple():
 def test_pack_rejects_non_string_variant():
     with pytest.raises(ContractError):
         _pack(voice_variants={"a": {1: ("ok", 5)}})
+
+
+# --- finite-numeric invariants: NaN/inf/bool are not valid ordering/threshold inputs ---
+#
+# tilt/herding/sensitivity are internal floats. A NaN would silently corrupt sorting and
+# stance math (NaN compares false to everything); a bool is not a real weight. Reject both.
+
+_BAD_NUMS = [float("nan"), float("inf"), float("-inf"), True]
+
+
+@pytest.mark.parametrize("bad", _BAD_NUMS)
+def test_pack_rejects_non_finite_tilt(bad):
+    with pytest.raises(ContractError):
+        _pack(axes=(Axis(name="ax", bucket_fn=lambda x: "mid", tilt={"mid": bad}),))
+
+
+@pytest.mark.parametrize("bad", _BAD_NUMS)
+def test_pack_rejects_non_finite_herding(bad):
+    with pytest.raises(ContractError):
+        _pack(herding={"a": bad, "b": 0.8})
+
+
+@pytest.mark.parametrize("bad", _BAD_NUMS)
+def test_pack_rejects_non_finite_sensitivity(bad):
+    with pytest.raises(ContractError):
+        _pack(sensitivity={"a": (bad,), "b": (0.5,)})
+
+
+# --- voice_variants stance keys are bounded categorical labels, not free integers ---
+
+
+@pytest.mark.parametrize("bad_stance", [999, 2, -2, True])
+def test_pack_rejects_out_of_range_variant_stance(bad_stance):
+    with pytest.raises(ContractError):
+        _pack(voice_variants={"a": {bad_stance: ("x",)}})
