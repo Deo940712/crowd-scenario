@@ -9,6 +9,58 @@
           "manualQa": []
         }
       }
+    },
+    "part-014": {
+      "slices": {
+        "slice-001": {
+          "type": "implementation",
+          "commands": [
+            "pytest tests/test_contracts.py -q"
+          ],
+          "dependsOn": [],
+          "manualQa": [
+            "python -c constructing a firewall-violating dataclass prints ContractError"
+          ]
+        },
+        "slice-002": {
+          "type": "implementation",
+          "commands": [
+            "pytest tests/test_contracts.py tests/test_engine.py -q"
+          ],
+          "dependsOn": [
+            "slice-001"
+          ],
+          "manualQa": [
+            "Three-domain run output byte-identical to .omo/evidence/baseline-*.json",
+            "python -c mutating a pack mapping prints TypeError"
+          ]
+        },
+        "slice-003": {
+          "type": "implementation",
+          "commands": [
+            "pytest tests/test_composer.py tests/test_cli.py -q"
+          ],
+          "dependsOn": [
+            "slice-002"
+          ],
+          "manualQa": [
+            "main([run,...,--metrics,<bad>]) returns 2 with a single error: line and empty stdout"
+          ]
+        },
+        "slice-004": {
+          "type": "implementation",
+          "commands": [
+            "pytest -q"
+          ],
+          "dependsOn": [
+            "slice-003"
+          ],
+          "manualQa": [
+            "Fresh-shell CLI happy+failure runs match recorded evidence",
+            "README structural claims verified accurate against hardened code"
+          ]
+        }
+      }
     }
   }
 }
