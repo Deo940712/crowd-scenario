@@ -135,7 +135,7 @@ def _build_run_dict(
     seed = make_seed(
         args.symbol,
         _metrics_for(args.domain, args.symbol, override),
-        market_scenario_label=args.scenario,
+        scenario_label=args.scenario,
         rng_seed=args.seed,
         horizon=horizon,
         intensity=intensity,
@@ -197,7 +197,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
         seed = make_seed(
             args.symbol,
             _metrics_for(args.domain, args.symbol),
-            market_scenario_label=args.scenario,
+            scenario_label=args.scenario,
             rng_seed=args.seed,
             horizon=args.horizon,
             intensity=args.intensity,

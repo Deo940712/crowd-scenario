@@ -45,7 +45,7 @@ def rehearse(symbol: str, scenario: str) -> dict[str, object]:
     Returns only categorical, firewall-safe facts — the same thing the CLI would emit.
     """
     raw = fetch_metrics(symbol)  # real numbers live ONLY in this local variable...
-    seed = make_seed(symbol, raw, market_scenario_label=scenario, pack=STOCK_TW)
+    seed = make_seed(symbol, raw, scenario_label=scenario, pack=STOCK_TW)
     # ...and are gone by here: seed carries buckets, not numbers.
     narrative = run_scenario(seed, pack=STOCK_TW, consensus_mode="aggregate")
     return {
