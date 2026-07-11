@@ -480,3 +480,52 @@ def test_severe_chain_is_deterministic():
     a = run_scenario(_seed(intensity="severe", metrics=metrics)).narrative_md
     b = run_scenario(_seed(intensity="severe", metrics=metrics)).narrative_md
     assert a == b
+
+
+# --- pack-overridable register + intensity display (part-015 slice-002) ---
+
+
+def _english_pack():
+    from crowdscenario.domains.base import Axis, DomainPack
+
+    return DomainPack(
+        domain_id="en_demo",
+        persona_ids=("dev",),
+        contra_ids=frozenset(),
+        herding={"dev": 0.5},
+        voice={"dev": {1: "ship it", 0: "wait and see", -1: "hold off"}},
+        display_name={"dev": "Developer"},
+        axes=(Axis(name="ax", bucket_fn=lambda x: "hi" if x > 0 else "lo",
+                   tilt={"hi": 1.0, "lo": -1.0}),),
+        sensitivity={"dev": (1.0,)},
+        consensus_display={"negative": "no", "neutral": "meh", "positive": "yes"},
+        register="en",
+        intensity_display={"mild": "mild", "severe": "strong"},
+    )
+
+
+def test_override_pack_register_reaches_persona_samples():
+    pack = _english_pack()
+    s = make_seed("X", {"ax": 0.9}, "evt", pack=pack)
+    result = run_scenario(s, pack=pack)
+    assert all(p.register == "en" for p in result.persona_samples)
+
+
+def test_override_pack_intensity_words_reach_narrative():
+    pack = _english_pack()
+    s = make_seed("X", {"ax": 0.9}, "evt", intensity="severe", pack=pack)
+    assert "strong" in run_scenario(s, pack=pack).narrative_md
+
+
+def test_default_packs_keep_old_register_and_words():
+    # The three shipped packs leave the new fields at default: the emitted output must
+    # carry the exact pre-part-015 values (byte-identity is locked by the baseline
+    # compare; this pins the two specific values).
+    seed = make_seed("0056", {"discount_premium": -0.6, "yield": 8.5}, "0056_cut", pack=STOCK_TW)
+    result = run_scenario(seed)
+    assert all(p.register == "zh-TW" for p in result.persona_samples)
+    severe = make_seed(
+        "0056", {"discount_premium": -0.6, "yield": 8.5}, "0056_cut",
+        intensity="severe", pack=STOCK_TW,
+    )
+    assert "劇烈" in run_scenario(severe).narrative_md

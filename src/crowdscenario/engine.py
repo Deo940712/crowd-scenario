@@ -238,7 +238,7 @@ def run_scenario(
         return PersonaReaction(
             archetype_id=a,
             stance=stance,
-            register="zh-TW",
+            register=pack.register,
             excerpt=_excerpt_for(a, stance, label, pack, seed.seed_hash),
         )
 
@@ -258,7 +258,7 @@ def run_scenario(
         consensus=consensus,
         consensus_display=pack.consensus_display.get(consensus, consensus),
         frame=frame,
-        intensity_zh="劇烈" if seed.intensity == "severe" else "溫和",
+        intensity_zh=pack.intensity_display.get(seed.intensity, seed.intensity),
         personas=tuple(
             PersonaFact(
                 persona_id=s.archetype_id,
