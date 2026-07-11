@@ -42,18 +42,22 @@ model. It's a **warning light**, not a steering wheel.
 
 - **The firewall is the product, and it's structural — not discipline.** The engine
   *cannot* leak a decision-grade scalar, even by accident: raw metrics are dropped at the
-  door (only ordinal buckets like `"deep_discount"` get in), and the only thing it can
-  emit is a categorical label — there is literally no additive float field on the output
-  for a "just add 0.05" leak to live in. The contract enforces this with explicit checks
-  that even survive `python -O`. (A text scanner adds defense-in-depth for optional LLM
-  prose; the structural contract is the load-bearing guarantee.)
+  door (the read-side `ScenarioSeed` rejects anything but ordinal string buckets like
+  `"deep_discount"` — a raw number can't even be *constructed* into a seed), and the only
+  thing it can emit is a categorical label — there is literally no additive float field on
+  the output for a "just add 0.05" leak to live in. The contract enforces this with
+  explicit `ContractError` checks that even survive `python -O`. (A text scanner adds
+  defense-in-depth for optional LLM prose; the structural contract is the load-bearing
+  guarantee.)
 - **Deterministic and reproducible.** Same input → byte-identical output, forever. No
   network, no clock, no randomness beyond a hashed seed. You can diff two runs, pin them
   in tests, and trust that a rehearsal is repeatable.
 - **Domain-pluggable.** The engine core knows nothing about stocks. A `DomainPack`
   supplies the personas, the axes, and the labels — so the *same* firewalled engine
-  rehearses Taiwan retail investors (`STOCK_TW`), a product launch (`PRODUCT_LAUNCH`), or
-  any crowd you can model. A bad pack can't even be constructed.
+  rehearses Taiwan retail investors (`STOCK_TW`), a product launch (`PRODUCT_LAUNCH`), a
+  software migration (`SOFTWARE_MIGRATION`), or any crowd you can model. A bad pack can't
+  even be constructed — and once validated it's deep-frozen, so it can't be mutated back
+  into an invalid state either.
 - **LLMs allowed, but never in charge.** The categorical decision is made by the engine
   *before* any language model runs. An optional `FusionNarrator` (2 writers + 1 judge)
   can prettify the prose, but every model output is screened by a deterministic scanner,
@@ -89,16 +93,24 @@ shapes; a leak is impossible *by construction*, whatever any LLM does:
 
 - **Read-side** — it reads only a frozen `ScenarioSeed` carrying *bucketed ordinal
   context* (e.g. `discount_premium -> "deep_discount"`), never a raw price/yield/metric.
+  The seed rejects any non-string / empty ordinal value in its `__post_init__`, so a raw
+  number can't be smuggled in even by constructing a `ScenarioSeed` directly — not just
+  via `make_seed`.
 - **Write-side** — it emits only a `CrowdNarrative`: a categorical stance
   (`negative | neutral | positive`) + narrative. There is **no additive numeric scalar**
   field on the artifact that anything could sum into a decision total. (Bounded
   categorical integers like `stance ∈ {-1,0,1}` exist, but they are labels from a fixed
-  set, not decision weights.) Each domain renders the stance into its own display labels
+  set, not decision weights — and a `PersonaReaction` rejects any stance outside
+  `{-1,0,1}`.) Each domain renders the stance into its own display labels
   (stock: `bullish`; product: `support`), but the contract value stays neutral vocabulary.
-- **Flag** — `non_authoritative` is hard-wired `True` and asserted in the contract.
+- **Flag** — `non_authoritative` *and* `synthetic_population` are both hard-wired `True`
+  and asserted in the contract (a non-synthetic or authoritative artifact can't be built).
 - **Pack-side** — a `DomainPack` can only supply *categorical* material. `validate_pack`
-  refuses any pack whose parallel tables are misaligned or whose display labels are
-  numeric, so a new domain cannot smuggle a scalar back in.
+  refuses any pack whose parallel tables are misaligned, whose display labels are numeric,
+  whose internal weights are non-finite (`NaN`/`inf`/bool), or whose voice-variant stance
+  keys stray outside `{-1,0,1}`, so a new domain cannot smuggle a scalar back in. The
+  validated pack is then deep-frozen (read-only mappings), so it stays valid for its whole
+  lifetime.
 
 **Layer 2 — the text scanner (defense-in-depth, not a proof).** For the optional
 `FusionNarrator`, `scan_violations` screens LLM prose for numeric market tokens and
@@ -148,7 +160,7 @@ python -m crowdscenario verify --symbol 0056 --scenario 0056_cut
 python -m crowdscenario verify --symbol 0056 --scenario 升息 --horizon long --intensity severe
 ```
 
-`--domain {stock_tw,product_launch}` selects the persona/axis pack.
+`--domain {stock_tw,product_launch,software_migration}` selects the persona/axis pack.
 `--horizon {intraday,swing,long}` shifts *who moves first* (intraday → the fastest
 herders lead; long → the slow, low-herding cohorts lead). `--intensity {mild,severe}`
 widens the tail framing. `--consensus-mode {hashed,aggregate,aggregate_neutral}` chooses
@@ -244,9 +256,10 @@ Each ends with a mandatory **"What this CANNOT tell us"** section — rehearsal,
 
 ## Domains & personas
 
-A `DomainPack` is a frozen bundle of a persona roster, N ordinal axes (each with its
+A `DomainPack` is a deep-frozen bundle of a persona roster, N ordinal axes (each with its
 own bucket function + tilt table), per-persona sensitivities, and a neutral→display
-label mapping. Two packs ship in the box:
+label mapping. `validate_pack` runs at construction and the mappings are then read-only,
+so an invalid pack can neither be built nor mutated into one. Three packs ship in the box:
 
 - **`STOCK_TW`** — 10 Taiwan retail archetypes over two axes (`discount_premium`,
   `yield`): 存股族 / 當沖客 / 殖利率派 / 槓桿 ETF 玩家 / 外資視角 / 恐慌散戶 /
@@ -327,6 +340,7 @@ src/crowdscenario/
     base.py          DomainPack / Axis / validate_pack — the pluggable-domain protocol
     stock_tw.py      STOCK_TW — the 10 Taiwan retail archetypes (2 axes)
     product.py       PRODUCT_LAUNCH — an 8-cohort product-launch domain (3 axes)
+    software.py      SOFTWARE_MIGRATION — an 8-cohort software-migration domain (3 axes)
   narrator/
     base.py          NarratorBackend / EngineFacts — the read-only facts hand-off
     firewall.py      scan_violations — the rule-based screen every LLM output must pass

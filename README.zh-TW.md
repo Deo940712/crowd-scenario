@@ -37,16 +37,18 @@ English → [README.md](README.md)
 ## 厲害在哪裡
 
 - **防火牆本身就是產品，而且是靠架構、不是靠自律。** 引擎*無法*洩漏任何決策等級的
-  純量，連不小心都做不到：原始指標在入口就被丟掉（只有 `"deep_discount"` 這種序數桶
-  進得來），而它唯一能吐的東西是一個類別性標籤——輸出物件上**根本沒有任何可加總的浮點
-  欄位**可以讓「就加個 0.05」這種洩漏藏身。契約用顯式檢查強制執行，連 `python -O` 都拔
-  不掉。（另有文字掃描器為選配 LLM 敘事提供縱深防禦；結構性契約才是承重的保證。）
+  純量，連不小心都做不到：原始指標在入口就被丟掉（讀取側的 `ScenarioSeed` 只收
+  `"deep_discount"` 這類序數字串桶——原始數字連「建構成種子」都做不到），而它唯一能吐的
+  東西是一個類別性標籤——輸出物件上**根本沒有任何可加總的浮點欄位**可以讓「就加個 0.05」
+  這種洩漏藏身。契約用顯式 `ContractError` 檢查強制執行，連 `python -O` 都拔不掉。
+  （另有文字掃描器為選配 LLM 敘事提供縱深防禦；結構性契約才是承重的保證。）
 - **決定性、可重現。** 相同輸入 → 位元組完全相同的輸出，永遠如此。無網路、無時鐘、
   除了雜湊種子外沒有任何隨機。你可以 diff 兩次執行、在測試裡釘死它，並信任每次排練
   都可重複。
 - **領域可插拔。** 引擎核心對「股票」一無所知。一個 `DomainPack` 提供人格、軸線、標籤
-  ——所以*同一個*防火牆引擎既能排練台灣散戶（`STOCK_TW`）、也能排練產品發表
-  （`PRODUCT_LAUNCH`），或任何你能建模的群眾。壞掉的 pack 甚至建構不出來。
+  ——所以*同一個*防火牆引擎既能排練台灣散戶（`STOCK_TW`）、產品發表
+  （`PRODUCT_LAUNCH`）、軟體遷移（`SOFTWARE_MIGRATION`），或任何你能建模的群眾。壞掉的
+  pack 甚至建構不出來——而且通過驗證後會被深度凍結，所以事後也無法被改壞成非法狀態。
 - **允許 LLM，但絕不讓它作主。** 類別性決策是引擎在任何語言模型跑之前就做好的。選配的
   `FusionNarrator`（2 個 writer + 1 個 judge）可以把敘事寫得更漂亮，但每個模型輸出都
   會被決定性掃描器過濾，而且**不管有沒有跑 LLM，吐出的立場完全相同**。決策等級的
@@ -97,7 +99,7 @@ python -m crowdscenario verify --symbol 0056 --scenario 0056_cut
 ```
 
 各旗標：
-- `--domain {stock_tw,product_launch}`：選人格／軸線 pack。
+- `--domain {stock_tw,product_launch,software_migration}`：選人格／軸線 pack。
 - `--horizon {intraday,swing,long}`：改變「誰先動」（intraday → 最快的跟風者先動；
   long → 慢、低跟風的族群先動；swing → 名冊順序的中間態）。
 - `--intensity {mild,severe}`：severe 會把反應鏈拉長、放大尾端。
@@ -181,7 +183,9 @@ print(run_scenario(seed, consensus_mode="aggregate").crowd_consensus)
 ## 領域與人格
 
 一個 `DomainPack` 是把人格名冊、N 條序數軸（各自帶分桶函式 + 傾向表）、每人格的敏感度、
-以及「中性 → 顯示標籤」對照，凍結成一個 bundle。內建兩個 pack：
+以及「中性 → 顯示標籤」對照，**深度凍結**成一個 bundle。`validate_pack` 在建構時就跑，
+之後所有 mapping 都唯讀，所以非法 pack 既建不出來、也改不壞（含非 finite 權重、
+voice-variant stance key 越界都會被拒）。內建三個 pack：
 
 - **`STOCK_TW`** — 10 個台灣散戶原型，兩條軸（`discount_premium`、`yield`）：
   存股族 / 當沖客 / 殖利率派 / 槓桿 ETF 玩家 / 外資視角 / 恐慌散戶 /
@@ -239,6 +243,7 @@ src/crowdscenario/
     base.py          DomainPack / Axis / validate_pack — 可插拔領域協議
     stock_tw.py      STOCK_TW — 10 個台灣散戶原型（2 軸）
     product.py       PRODUCT_LAUNCH — 8 族群的產品發表領域（3 軸）
+    software.py      SOFTWARE_MIGRATION — 8 族群的軟體遷移領域（3 軸）
   narrator/
     base.py          NarratorBackend / EngineFacts — 唯讀事實交接
     firewall.py      scan_violations — 每個 LLM 輸出都要過的規則式掃描（縱深防禦）
