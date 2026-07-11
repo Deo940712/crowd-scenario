@@ -30,7 +30,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
 
-from crowdscenario.contracts import CONSENSUS, ContractError
+from crowdscenario.contracts import CONSENSUS, INTENSITIES, ContractError
 
 
 def _is_finite_number(value: object) -> bool:
@@ -85,6 +85,15 @@ class DomainPack:
     # Empty (the default) means every persona uses its single ``voice`` line as before —
     # so a pack that supplies no variants is byte-identical to the pre-variant engine.
     voice_variants: Mapping[str, Mapping[int, tuple[str, ...]]] = field(default_factory=dict)
+    # Persona speech register (was hardcoded "zh-TW" in the engine). A non-Chinese
+    # domain can override it; the default reproduces the pre-part-015 value exactly.
+    register: str = "zh-TW"
+    # Intensity display words used in the narrative (was the hardcoded 溫和/劇烈 ternary
+    # in the engine). Must cover the full INTENSITIES vocabulary; defaults keep the
+    # three shipped packs byte-identical.
+    intensity_display: Mapping[str, str] = field(
+        default_factory=lambda: {"mild": "溫和", "severe": "劇烈"}
+    )
 
     def __post_init__(self) -> None:
         validate_pack(self)
@@ -97,7 +106,14 @@ def _freeze_pack(pack: DomainPack) -> None:
     attribute; the dicts it points at stay mutable without this. ``Axis.tilt`` is frozen
     by ``Axis.__post_init__`` when each axis is constructed.
     """
-    for attr in ("herding", "display_name", "sensitivity", "consensus_display", "horizon_frame"):
+    for attr in (
+        "herding",
+        "display_name",
+        "sensitivity",
+        "consensus_display",
+        "horizon_frame",
+        "intensity_display",
+    ):
         object.__setattr__(pack, attr, MappingProxyType(dict(getattr(pack, attr))))
     # voice is nested one level: {persona: {stance: line}}.
     frozen_voice = {pid: MappingProxyType(dict(stances)) for pid, stances in pack.voice.items()}
@@ -185,6 +201,14 @@ def validate_pack(pack: DomainPack) -> None:
     for label in pack.consensus_display.values():
         if not isinstance(label, str):
             raise ContractError("consensus_display values must be strings (no scalar)")
+
+    if not isinstance(pack.register, str) or not pack.register:
+        raise ContractError("register must be a non-empty string")
+    if not (set(INTENSITIES) <= set(pack.intensity_display.keys())):
+        raise ContractError("intensity_display must cover the INTENSITIES vocabulary")
+    for word in pack.intensity_display.values():
+        if not isinstance(word, str) or not word:
+            raise ContractError("intensity_display values must be non-empty strings")
 
     # Optional voice_variants: if present, every keyed persona must be in the roster and
     # each variant list must be a non-empty tuple of non-empty strings (a numeric or

@@ -366,3 +366,54 @@ def test_pack_voice_variants_is_deep_read_only():
     p = _pack(voice_variants={"a": {1: ("x1", "x2")}})
     with pytest.raises(TypeError):
         p.voice_variants["a"][1] = ("hack",)
+
+
+# --- pack-overridable register + intensity_display (part-015) -----------------------
+#
+# The persona register and the intensity display words used to be hardcoded in the
+# engine ("zh-TW", 溫和/劇烈). They now live on the pack so a non-Chinese domain can
+# speak its own language; the defaults reproduce the exact old values, keeping the
+# three shipped packs byte-identical.
+
+
+def test_pack_register_defaults_to_zh_tw():
+    assert _pack().register == "zh-TW"
+
+
+def test_pack_intensity_display_defaults_to_old_words():
+    p = _pack()
+    assert p.intensity_display["mild"] == "溫和"
+    assert p.intensity_display["severe"] == "劇烈"
+
+
+def test_pack_register_and_intensity_display_are_overridable():
+    p = _pack(register="en", intensity_display={"mild": "mild", "severe": "strong"})
+    assert p.register == "en"
+    assert p.intensity_display["severe"] == "strong"
+
+
+def test_pack_rejects_non_string_register():
+    with pytest.raises(ContractError):
+        _pack(register=5)
+
+
+def test_pack_rejects_empty_register():
+    with pytest.raises(ContractError):
+        _pack(register="")
+
+
+def test_pack_rejects_non_string_intensity_display_value():
+    with pytest.raises(ContractError):
+        _pack(intensity_display={"mild": 1, "severe": "strong"})
+
+
+def test_pack_rejects_incomplete_intensity_display():
+    # must cover the full INTENSITIES vocabulary (mild + severe)
+    with pytest.raises(ContractError):
+        _pack(intensity_display={"mild": "gentle"})
+
+
+def test_pack_intensity_display_is_read_only():
+    p = _pack()
+    with pytest.raises(TypeError):
+        p.intensity_display["mild"] = "x"
