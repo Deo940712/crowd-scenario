@@ -1,6 +1,9 @@
 """The ``DomainPack`` protocol: pluggable personas + ordinal axes + display labels.
 
-A pack bundles everything the engine used to hard-code for Taiwan stocks:
+The engine core is domain-agnostic — the same stance/consensus/chain logic rehearses a
+stock crowd, a product launch, or a software migration, depending solely on which pack
+you hand it. A pack bundles everything the engine once hard-coded for its first domain
+(Taiwan stocks):
 
 - ``persona_ids`` — the closed persona roster (was ``_ARCHETYPES``).
 - ``contra_ids`` — personas that FADE the consensus (was ``_CONTRA``); the rest amplify.
@@ -13,7 +16,11 @@ A pack bundles everything the engine used to hard-code for Taiwan stocks:
 - ``sensitivity`` — per-persona weight on each axis, one float per axis, same order
   as ``axes`` (was ``_ARCHETYPE_SENSITIVITY``).
 - ``consensus_display`` — maps the neutral CONSENSUS vocabulary to this domain's own
-  display labels (e.g. stock: negative->bearish). Display only; never re-enters logic.
+  display labels (stock: negative->bearish; software: negative->resist). Display only;
+  never re-enters logic.
+- ``register`` / ``intensity_display`` — the persona speech register and the intensity
+  wording used in the narrative (were hardcoded "zh-TW" / 溫和/劇烈 in the engine);
+  overridable so a non-Chinese domain can speak its own language.
 
 FIREWALL NOTE: a pack supplies only categorical material. The per-axis ``tilt`` floats
 and the ``herding`` floats are internal ordering/threshold inputs — they are collapsed

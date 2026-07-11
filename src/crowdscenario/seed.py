@@ -5,8 +5,9 @@ crowd personas can never see or echo an authoritative figure. This is the ONLY
 place a raw number is turned into the seed the engine reads.
 
 Bucketing is driven by the domain pack's axes: each axis projects one raw metric to
-an ordinal bucket via its own ``bucket_fn``. The stock pack keeps the original
-``discount_premium`` + ``yield`` axes; another domain supplies its own.
+an ordinal bucket via its own ``bucket_fn`` — a stock pack buckets discount/yield,
+a software pack buckets breaking-severity/migration-effort; the engine never knows
+the difference. Each domain supplies its own axes.
 """
 
 from __future__ import annotations

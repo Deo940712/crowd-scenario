@@ -4,7 +4,8 @@ The crowd scenario engine is a **non-authoritative narrative side-rail**. Its
 contracts are deliberately shaped so it *cannot* leak a decision-grade number:
 
 - ``ScenarioSeed`` (read-side): the ONLY thing the engine reads — a frozen,
-  bucketed projection carrying ordinal context only, never raw prices/yields.
+  bucketed projection carrying ordinal context only, never a raw metric (a price,
+  a yield, a churn rate, a migration-effort score — whatever the domain measures).
 - ``CrowdNarrative`` (write-side): the ONLY thing the engine emits — a categorical
   crowd stance + narrative, with **no numeric scalar** anything could sum into a
   decision. ``non_authoritative`` is hard-wired ``True``.
@@ -40,18 +41,21 @@ class ContractError(ValueError):
 class ScenarioSeed:
     """Read-side firewall contract: the only thing the crowd engine may read.
 
-    A frozen projection carrying ONLY bucketed ordinal context (e.g.
-    ``discount_premium -> "deep_discount"``). Personas never see raw numbers,
-    which structurally prevents echoing or recomputing an authoritative figure.
+    A frozen projection carrying ONLY bucketed ordinal context — e.g.
+    ``discount_premium -> "deep_discount"`` in a stock pack, or
+    ``migration_effort -> "high_effort"`` in a software pack. Personas never see raw
+    numbers, which structurally prevents echoing or recomputing an authoritative figure.
     """
 
     seed_id: str
     rng_seed: int
+    # The already-decided event being rehearsed. Kept under its historical name for
+    # serialized-schema stability; ``make_seed`` accepts the neutral ``scenario_label``.
     market_scenario_label: str
     # Which domain pack produced this seed. Bound so ``run_scenario`` can refuse a
     # stock seed run against a product pack (a silent semantic mismatch otherwise).
     domain_id: str = "stock_tw"
-    # Ordinal buckets only — NO raw price/nav/yield numbers.
+    # Ordinal buckets only — NO raw metric numbers (price/nav/yield/effort/churn/...).
     ordinal_context: Mapping[str, str] = field(default_factory=dict)
     seed_hash: str = ""
     # Rehearsal dimensions: which time-scale and how strong the shock. Categorical
