@@ -8,14 +8,14 @@
 
 ## What it does
 
-You have already made a decision (a rate cut hit, a price hike is shipping). You want to
-*rehearse* how a crowd might react to it — not to predict the future, but to pressure-test
-your own read against a synthetic second opinion.
+You have already made a decision (you're shipping a breaking rewrite, or raising a price,
+or cutting a rate). You want to *rehearse* how a crowd might react to it — not to predict
+the future, but to pressure-test your own read against a synthetic second opinion.
 
 `crowd-scenario` takes a bucketed snapshot of the situation and plays out a crowd of
 **persona archetypes** — each with its own voice and its own sensitivities — reacting to
-the event. It orders them into a **who-moves-first reaction chain** (the fast herders
-panic, the slow fundamentals cohorts wait) and emits **one categorical stance**
+the event. It orders them into a **who-moves-first reaction chain** (the eager adopters
+move first, the conservative cohorts wait) and emits **one categorical stance**
 (`negative | neutral | positive`) plus a readable narrative.
 
 That's it. It decides no number, recommends no action, and never writes back into your
@@ -23,20 +23,20 @@ model. It's a **warning light**, not a steering wheel.
 
 ```text
    your situation                the engine                    what comes out
- ┌────────────────┐   buckets   ┌──────────────────────┐      ┌───────────────────┐
- │ discount -0.6  │────────────▶│ 10 personas react,   │─────▶│ stance: bullish   │
- │ yield     8.5  │  (numbers   │ ordered who-moves-   │      │ + reaction-chain  │
- │ event: rate cut│   dropped)  │ first, deterministic │      │   narrative       │
- └────────────────┘             └──────────────────────┘      └───────────────────┘
+ ┌────────────────────┐ buckets ┌──────────────────────┐      ┌───────────────────┐
+ │ breaking_sev   0.95│────────▶│ 8 personas react,    │─────▶│ stance: resist    │
+ │ migrate_effort 0.9 │(numbers │ ordered who-moves-   │      │ + reaction-chain  │
+ │ event: v9 rewrite  │ dropped)│ first, deterministic │      │   narrative       │
+ └────────────────────┘         └──────────────────────┘      └───────────────────┘
         raw metrics stop here ↑                 no decision-grade scalar leaves ↑
 ```
 
 > **Precise claim.** "No number leaves" is shorthand. What the contract actually
 > guarantees is: **no decision-grade additive scalar** (score / weight / modifier /
-> expected return) and **no raw market number** (price / yield / NAV) is ever on the
-> emitted artifact. Small bounded categorical integers *do* appear — a persona `stance ∈
-> {-1,0,1}`, `narrative_intensity ∈ {1,2,3}`, ordinal list markers — but they are labels
-> from a fixed finite set, not values anything could sum into a decision.
+> expected return) and **no raw metric number** (price / yield / NAV / effort / churn) is
+> ever on the emitted artifact. Small bounded categorical integers *do* appear — a persona
+> `stance ∈ {-1,0,1}`, `narrative_intensity ∈ {1,2,3}`, ordinal list markers — but they are
+> labels from a fixed finite set, not values anything could sum into a decision.
 
 ## Why it's powerful
 

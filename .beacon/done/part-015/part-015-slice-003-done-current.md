@@ -32,5 +32,13 @@ Manual QA:
 Commits:
 - docs(readme): lead with a non-finance domain example (en+zh)
 - docs: neutralize finance-only wording in shared-core docstrings
+- docs: de-finance README openings + document part-014/015 in CHANGELOG (follow-up)
+
+Follow-up (post-close, same slice scope — docs de-finance): the README openings
+(tagline / "What it does" / ASCII diagram) were still finance-first; de-financed to a
+software-migration example in both languages (breaking_sev/migrate_effort → resist).
+CHANGELOG gained an [Unreleased] section documenting part-014 (firewall hardening) and
+part-015 (de-finance). Docs-only: pytest 335 passed, ruff clean, three-domain
+determinism IDENTICAL, no finance-first wording remains in the openings.
 
 Incidents: none
