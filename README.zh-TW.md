@@ -75,14 +75,18 @@ pip install -e ".[dev]"      # 可編輯安裝 + 開發工具（pytest, ruff, hy
 ## 從命令列使用
 
 ```bash
-# 一次排練，股票領域（決定性；輸出 JSON）——--domain 預設是 stock_tw
+# 一次排練：軟體生態系會怎麼面對一次 breaking 的 v9 大改版？
+# （決定性；輸出 JSON——引擎是領域無關的，不是金融工具）
+python -m crowdscenario run --domain software_migration --symbol big_rewrite --scenario v9_rewrite
+
+# 產品發表：使用者族群怎麼面對漲價？
+python -m crowdscenario run --domain product_launch --symbol price_hike --scenario price_hike
+
+# 股票領域（--domain 預設是 stock_tw）
 python -m crowdscenario run --symbol 0056 --scenario 0056_cut
 
 # 用時間尺度 + 衝擊強度重塑「誰先動」
-python -m crowdscenario run --symbol 0056 --scenario 升息 --horizon long --intensity severe
-
-# 換個領域：排練一次產品發表
-python -m crowdscenario run --domain product_launch --symbol big_feature --scenario big_feature
+python -m crowdscenario run --domain software_migration --symbol big_rewrite --scenario v9_rewrite --horizon long --intensity severe
 
 # 讓群眾「方向」跟隨人格多數決，而不是種子雜湊擲骰
 python -m crowdscenario run --domain product_launch --symbol price_hike --scenario price_hike --consensus-mode aggregate
@@ -95,7 +99,7 @@ python -m crowdscenario run --symbol MYETF --scenario evt --metrics '{"discount_
 python -m crowdscenario run --symbol 0056 --scenario evt --sweep
 
 # 決定性檢查——比對完整產物（立場 + 敘事 + 人格樣本 + seed_id）
-python -m crowdscenario verify --symbol 0056 --scenario 0056_cut
+python -m crowdscenario verify --domain software_migration --symbol big_rewrite --scenario v9_rewrite
 ```
 
 各旗標：
@@ -115,27 +119,36 @@ python -m crowdscenario verify --symbol 0056 --scenario 0056_cut
 
 ```python
 from crowdscenario import make_seed, run_scenario, compose_divergence, posture_from_score
-from crowdscenario import STOCK_TW, PRODUCT_LAUNCH
+from crowdscenario import SOFTWARE_MIGRATION, STOCK_TW, PRODUCT_LAUNCH
 
-# --- 股票領域（預設 pack）---
+# --- 軟體生態系面對 breaking 大改版（非金融）---
 seed = make_seed(
-    "0056",
-    {"discount_premium": -0.6, "yield": 8.5},   # 原始指標——只有它們的桶會存活
-    market_scenario_label="0056_cut",
+    "big_rewrite",
+    {"breaking_severity": 0.95, "migration_effort": 0.9, "value_gain": 0.05},
+    scenario_label="v9_rewrite",                 # 原始指標——只有它們的桶會存活
     horizon="long",
     intensity="severe",
-    pack=STOCK_TW,
+    pack=SOFTWARE_MIGRATION,
 )
-narrative = run_scenario(seed, pack=STOCK_TW)     # 決定性的 CrowdNarrative
+narrative = run_scenario(seed, pack=SOFTWARE_MIGRATION)   # 決定性的 CrowdNarrative
 print(narrative.crowd_consensus)                  # 'negative' | 'neutral' | 'positive'
-print(STOCK_TW.consensus_display[narrative.crowd_consensus])  # 'bearish'|'neutral'|'bullish'
+print(SOFTWARE_MIGRATION.consensus_display[narrative.crowd_consensus])  # 'resist'|'wait'|'adopt'
 print(narrative.narrative_md)                     # 反應鏈故事
 
-# --- 換個領域：同一引擎、不同 pack ---
+# --- 同一引擎：股票領域（預設 pack）---
+seed = make_seed(
+    "0056",
+    {"discount_premium": -0.6, "yield": 8.5},
+    scenario_label="0056_cut",
+    pack=STOCK_TW,
+)
+print(run_scenario(seed, pack=STOCK_TW).crowd_consensus)
+
+# --- 或產品發表 ---
 seed = make_seed(
     "big_feature",
     {"price_change": 0.0, "value_delta": 0.7, "switching_cost": 0.5},
-    market_scenario_label="big_feature",
+    scenario_label="big_feature",
     pack=PRODUCT_LAUNCH,
 )
 print(run_scenario(seed, pack=PRODUCT_LAUNCH).crowd_consensus)
@@ -160,7 +173,7 @@ def fetch_metrics(symbol):        # <- 你的真實資料層放這裡
     return {"discount_premium": -0.6, "yield": 8.5}
 
 raw = fetch_metrics("0056")       # 真實數字只活在這個區域變數裡……
-seed = make_seed("0056", raw, market_scenario_label="rate_cut", pack=STOCK_TW)
+seed = make_seed("0056", raw, scenario_label="rate_cut", pack=STOCK_TW)
 # ……到這裡就沒了：種子帶的是桶，不是數字。
 print(run_scenario(seed, consensus_mode="aggregate").crowd_consensus)
 ```

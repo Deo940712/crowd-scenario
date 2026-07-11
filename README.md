@@ -138,14 +138,18 @@ Zero runtime dependencies — pure standard library.
 ## Use it from the CLI
 
 ```bash
-# one rehearsal, stock domain (deterministic; JSON out) — --domain defaults to stock_tw
+# one rehearsal: how would a software ecosystem react to a breaking v9 rewrite?
+# (deterministic; JSON out — the engine is domain-agnostic, not a finance tool)
+python -m crowdscenario run --domain software_migration --symbol big_rewrite --scenario v9_rewrite
+
+# a product launch: how do user cohorts react to a price hike?
+python -m crowdscenario run --domain product_launch --symbol price_hike --scenario price_hike
+
+# a stock domain rehearsal (--domain defaults to stock_tw)
 python -m crowdscenario run --symbol 0056 --scenario 0056_cut
 
 # reshape which cohort leads the chain by time-scale + shock strength
-python -m crowdscenario run --symbol 0056 --scenario 升息 --horizon long --intensity severe
-
-# a different domain: rehearse a product launch
-python -m crowdscenario run --domain product_launch --symbol big_feature --scenario big_feature
+python -m crowdscenario run --domain software_migration --symbol big_rewrite --scenario v9_rewrite --horizon long --intensity severe
 
 # let the crowd DIRECTION follow the persona majority instead of the seed hash
 python -m crowdscenario run --domain product_launch --symbol price_hike --scenario price_hike --consensus-mode aggregate
@@ -156,7 +160,7 @@ python -m crowdscenario run --symbol MYETF --scenario evt --metrics '{"discount_
 
 # determinism check — compares the FULL artifact (consensus + narrative + persona
 # samples + seed_id), and takes --horizon / --intensity like `run` does
-python -m crowdscenario verify --symbol 0056 --scenario 0056_cut
+python -m crowdscenario verify --domain software_migration --symbol big_rewrite --scenario v9_rewrite
 python -m crowdscenario verify --symbol 0056 --scenario 升息 --horizon long --intensity severe
 ```
 
@@ -178,27 +182,36 @@ falls back to neutral input and says so on stderr. `run`'s JSON also reports
 
 ```python
 from crowdscenario import make_seed, run_scenario, compose_divergence, posture_from_score
-from crowdscenario import STOCK_TW, PRODUCT_LAUNCH
+from crowdscenario import SOFTWARE_MIGRATION, STOCK_TW, PRODUCT_LAUNCH
 
-# --- stock domain (the default pack) ---
+# --- a software ecosystem reacting to a breaking rewrite (non-finance) ---
 seed = make_seed(
-    "0056",
-    {"discount_premium": -0.6, "yield": 8.5},   # raw metrics — only their buckets survive
-    market_scenario_label="0056_cut",
+    "big_rewrite",
+    {"breaking_severity": 0.95, "migration_effort": 0.9, "value_gain": 0.05},
+    scenario_label="v9_rewrite",                 # raw metrics — only their buckets survive
     horizon="long",
     intensity="severe",
-    pack=STOCK_TW,                               # omit to use the default (STOCK_TW)
+    pack=SOFTWARE_MIGRATION,
 )
-narrative = run_scenario(seed, pack=STOCK_TW)     # deterministic CrowdNarrative
+narrative = run_scenario(seed, pack=SOFTWARE_MIGRATION)  # deterministic CrowdNarrative
 print(narrative.crowd_consensus)                  # 'negative' | 'neutral' | 'positive'
-print(STOCK_TW.consensus_display[narrative.crowd_consensus])  # 'bearish'|'neutral'|'bullish'
+print(SOFTWARE_MIGRATION.consensus_display[narrative.crowd_consensus])  # 'resist'|'wait'|'adopt'
 print(narrative.narrative_md)                     # the reaction-chain story
 
-# --- a different domain: same engine, different pack ---
+# --- the same engine, a stock domain (the default pack) ---
+seed = make_seed(
+    "0056",
+    {"discount_premium": -0.6, "yield": 8.5},
+    scenario_label="0056_cut",
+    pack=STOCK_TW,                               # omit to use the default (STOCK_TW)
+)
+print(run_scenario(seed, pack=STOCK_TW).crowd_consensus)
+
+# --- or a product launch ---
 seed = make_seed(
     "big_feature",
     {"price_change": 0.0, "value_delta": 0.7, "switching_cost": 0.5},
-    market_scenario_label="big_feature",
+    scenario_label="big_feature",
     pack=PRODUCT_LAUNCH,
 )
 print(run_scenario(seed, pack=PRODUCT_LAUNCH).crowd_consensus)  # neutral vocabulary
@@ -226,7 +239,7 @@ def fetch_metrics(symbol):        # <- your real data layer goes here
     return {"discount_premium": -0.6, "yield": 8.5}
 
 raw = fetch_metrics("0056")       # real numbers live ONLY in this local variable...
-seed = make_seed("0056", raw, market_scenario_label="rate_cut", pack=STOCK_TW)
+seed = make_seed("0056", raw, scenario_label="rate_cut", pack=STOCK_TW)
 # ...and are gone by here: the seed carries buckets, not numbers.
 print(run_scenario(seed, consensus_mode="aggregate").crowd_consensus)
 ```
