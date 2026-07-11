@@ -7,7 +7,7 @@ Work plan (executor detail): `.omo/plans/definance-crowd-scenario.md`
 
 ### part-015-slice-001: scenario_label rename + alias (seed.py)
 
-Status: planned
+Status: done → `.beacon/done/part-015/part-015-slice-001-done-current.md`
 
 Goal: `make_seed` 改用 `scenario_label`,舊名保留 deprecated keyword-only alias。
 
