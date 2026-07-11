@@ -1,35 +1,27 @@
 ﻿# CURRENT
 
-Part: part-015
-Slice: slice-004
-Status: active
-Design authority: `.beacon/parts/part-015/DESIGN.md`
-TODO source: `.beacon/parts/part-015/TODO.md#part-015-slice-004-full-verification--close`
-Work plan: `.omo/plans/definance-crowd-scenario.md` (todo 9)
+Status: planning-only
 
-## Goal
+No active executable SLICE is promoted yet.
 
-全面驗證 + 歸檔 part-015:pytest/ruff/`python -O`/LSP/三 domain byte-compare/
-verify/DeprecationWarning 路徑;寫 verification-report.md;CURRENT 回 planning-only。
+**part-015 (De-finance) COMPLETE** — all 4 slices done, archived under
+`.beacon/done/part-015/`:
+- slice-001 seed.py: scenario_label preferred, market_scenario_label a deprecated
+  keyword-only alias (DeprecationWarning; conflict → TypeError)
+- slice-002 base.py + engine.py: register + intensity_display are pack-overridable;
+  defaults reproduce the old values (three domains byte-identical)
+- slice-003 docs: READMEs lead with software_migration; shared-core docstrings
+  domain-neutralized
+- slice-004: full verification + archive
 
-## Allowed Scope
-- [ ] .beacon/**(歸檔)
-- [ ] .omo/evidence/**
+Final: `pytest -q` → 335 passed (was 316), ruff clean, `python -O` 335, LSP 0,
+three-domain determinism byte-identical vs part-014 baselines. Version unchanged (0.2.0).
 
-## Forbidden Scope
-- 任何 src 變更;git push
+See `.beacon/done/part-015/verification-report.md`.
 
-## Expected Output
+## Open backlog (need DESIGN + TODO before promotion)
 
-全部 gate 綠;三 domain byte-identical;part-015 done;CURRENT planning-only。
+- backlog-007 (pack prior consensus model) — WON'T-DO unless a future domain over-neutralizes.
+- backlog-008 (report divergence panel + `--all-cases` batch) — enhancement.
 
-## Verification Plan
-- UnitTestCore: `.beacon/verification/UnitTestCore.ps1 -Part part-015 -Slice slice-004`
-- Regression: 全部 verification target
-- Manual QA: 新 shell 新舊參數 + override 路徑
-
-## Current Blockers
-None
-
-## Recovery Incident
-None
+No open executable work. New requests need a fresh PART DESIGN + TODO.

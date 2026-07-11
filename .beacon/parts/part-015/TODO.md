@@ -78,7 +78,7 @@ Done gate:
 
 ### part-015-slice-004: full verification + close
 
-Status: planned
+Status: done → `.beacon/done/part-015/verification-report.md`
 
 Goal: 全面驗證 + 歸檔 part-015。
 
