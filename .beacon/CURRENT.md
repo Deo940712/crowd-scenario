@@ -1,37 +1,33 @@
 ﻿# CURRENT
 
 Part: part-015
-Slice: slice-002
+Slice: slice-003
 Status: active
 Design authority: `.beacon/parts/part-015/DESIGN.md`
-TODO source: `.beacon/parts/part-015/TODO.md#part-015-slice-002-pack-overridable-register--intensity_display-basepy--enginepy`
-Work plan: `.omo/plans/definance-crowd-scenario.md` (todos 4-6)
+TODO source: `.beacon/parts/part-015/TODO.md#part-015-slice-003-docs-de-finance-readmes--docstrings`
+Work plan: `.omo/plans/definance-crowd-scenario.md` (todos 7-8)
 
 ## Goal
 
-把 `register`("zh-TW")與 intensity 顯示詞(溫和/劇烈)從 engine 硬編碼移到
-`DomainPack` 可覆寫欄位;三個現有 pack 不填 → 預設沿舊值。
-決定論硬 gate:三 domain byte-identical 於 part-014 基線。
+README(中英)主範例改 software_migration 領先(股票退為其一,不刪);
+`make_seed` 範例改用 `scenario_label`;shared-core docstring 金融舉例中性化。
 
 ## Allowed Scope
-- [ ] src/crowdscenario/domains/base.py(新欄位 + validate + freeze)
-- [ ] src/crowdscenario/engine.py(僅 :241 register 與 :261 intensity 來源)
-- [ ] tests/test_contracts.py、tests/test_engine.py
+- [ ] README.md、README.zh-TW.md
+- [ ] src/crowdscenario/contracts.py、seed.py、domains/base.py 的 DOCSTRING(僅文字)
 
 ## Forbidden Scope
-- seed.py、cli.py、composer.py
-- 三個 pack 的實際值(stock_tw.py / product.py / software.py 不動)
-- EngineFacts 欄位名;任何 `assert`;git push
+- 任何程式行為、簽名、欄位;股票範例不得刪除;git push
 
 ## Expected Output
 
-pack 預設 register=="zh-TW"、intensity_display=={"mild":"溫和","severe":"劇烈"};
-override pack 測試 fail-then-pass;三 domain byte-identical。
+兩份 README 第一個可跑範例為 software_migration;docstring 含非金融例;
+`pytest -q` 與 `ruff` 不受影響。
 
 ## Verification Plan
-- UnitTestCore: `.beacon/verification/UnitTestCore.ps1 -Part part-015 -Slice slice-002`
-- Regression: `pytest -q`;`ruff check .`;LSP src/ = 0;`python -O -m pytest tests/test_contracts.py -q`
-- Manual QA: override pack 驗證;byte-compare x3
+- UnitTestCore: design-review gate(docs-only,無自動命令)
+- Regression: `pytest -q`;`ruff check .`
+- Manual QA: README 新首例指令實跑 exit 0
 
 ## Current Blockers
 None

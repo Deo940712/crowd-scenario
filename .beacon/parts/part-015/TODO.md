@@ -31,7 +31,7 @@ Done gate:
 
 ### part-015-slice-002: pack-overridable register + intensity_display (base.py + engine.py)
 
-Status: planned
+Status: done → `.beacon/done/part-015/part-015-slice-002-done-current.md`
 
 Goal: 把 `register` 與 intensity 顯示詞從 engine 硬編碼移到 DomainPack。
 
