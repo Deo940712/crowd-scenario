@@ -1,33 +1,32 @@
 ﻿# CURRENT
 
 Part: part-015
-Slice: slice-003
+Slice: slice-004
 Status: active
 Design authority: `.beacon/parts/part-015/DESIGN.md`
-TODO source: `.beacon/parts/part-015/TODO.md#part-015-slice-003-docs-de-finance-readmes--docstrings`
-Work plan: `.omo/plans/definance-crowd-scenario.md` (todos 7-8)
+TODO source: `.beacon/parts/part-015/TODO.md#part-015-slice-004-full-verification--close`
+Work plan: `.omo/plans/definance-crowd-scenario.md` (todo 9)
 
 ## Goal
 
-README(中英)主範例改 software_migration 領先(股票退為其一,不刪);
-`make_seed` 範例改用 `scenario_label`;shared-core docstring 金融舉例中性化。
+全面驗證 + 歸檔 part-015:pytest/ruff/`python -O`/LSP/三 domain byte-compare/
+verify/DeprecationWarning 路徑;寫 verification-report.md;CURRENT 回 planning-only。
 
 ## Allowed Scope
-- [ ] README.md、README.zh-TW.md
-- [ ] src/crowdscenario/contracts.py、seed.py、domains/base.py 的 DOCSTRING(僅文字)
+- [ ] .beacon/**(歸檔)
+- [ ] .omo/evidence/**
 
 ## Forbidden Scope
-- 任何程式行為、簽名、欄位;股票範例不得刪除;git push
+- 任何 src 變更;git push
 
 ## Expected Output
 
-兩份 README 第一個可跑範例為 software_migration;docstring 含非金融例;
-`pytest -q` 與 `ruff` 不受影響。
+全部 gate 綠;三 domain byte-identical;part-015 done;CURRENT planning-only。
 
 ## Verification Plan
-- UnitTestCore: design-review gate(docs-only,無自動命令)
-- Regression: `pytest -q`;`ruff check .`
-- Manual QA: README 新首例指令實跑 exit 0
+- UnitTestCore: `.beacon/verification/UnitTestCore.ps1 -Part part-015 -Slice slice-004`
+- Regression: 全部 verification target
+- Manual QA: 新 shell 新舊參數 + override 路徑
 
 ## Current Blockers
 None

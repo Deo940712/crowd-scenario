@@ -55,7 +55,7 @@ Done gate:
 
 ### part-015-slice-003: docs de-finance (READMEs + docstrings)
 
-Status: planned
+Status: done → `.beacon/done/part-015/part-015-slice-003-done-current.md`
 
 Goal: README 主範例改非金融領先;shared-core docstring 中性化。
 
