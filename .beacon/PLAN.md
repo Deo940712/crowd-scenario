@@ -53,6 +53,7 @@ crowd-scenario：deterministic、firewalled、domain-pluggable 的群眾情境**
 | 優先 | PART | Status | Goal | Design | TODO |
 | --- | --- | --- | --- | --- | --- |
 | P1 | part-014 | done (4 slices) | 補強公開契約與 DomainPack，使 firewall 違規物件無法建構/被改壞（規劃+雙路審查：`.omo/plans/structural-firewall-hardening.md`） | `.beacon/parts/part-014/DESIGN.md` | `.beacon/done/part-014/` |
+| P2 | part-015 | in-progress (slice-001 active) | 去金融化：scenario_label 改名（相容 alias）、register/強度詞移入 pack、README 非金融領先、docstring 中性化——行為與輸出 byte-identical（規劃：`.omo/plans/definance-crowd-scenario.md`） | `.beacon/parts/part-015/DESIGN.md` | `.beacon/parts/part-015/TODO.md` |
 
 ## Success Criteria（Phase 2）
 

@@ -61,6 +61,56 @@
           ]
         }
       }
+    },
+    "part-015": {
+      "slices": {
+        "slice-001": {
+          "type": "implementation",
+          "commands": [
+            "pytest tests/test_seed.py tests/test_contracts.py -q"
+          ],
+          "dependsOn": [],
+          "manualQa": [
+            "Old and new scenario-label parameter paths both work; conflicting values raise TypeError",
+            "Three-domain run output byte-identical to .omo/evidence/baseline-*.json"
+          ]
+        },
+        "slice-002": {
+          "type": "implementation",
+          "commands": [
+            "pytest tests/test_engine.py tests/test_contracts.py -q"
+          ],
+          "dependsOn": [
+            "slice-001"
+          ],
+          "manualQa": [
+            "Override pack changes register and intensity wording; three shipped packs byte-identical"
+          ]
+        },
+        "slice-003": {
+          "type": "design",
+          "commands": [],
+          "dependsOn": [
+            "slice-002"
+          ],
+          "manualQa": [
+            "README lead example is software_migration in both languages and runs exit 0",
+            "Shared-core docstrings include a non-finance example"
+          ]
+        },
+        "slice-004": {
+          "type": "implementation",
+          "commands": [
+            "pytest -q"
+          ],
+          "dependsOn": [
+            "slice-003"
+          ],
+          "manualQa": [
+            "Fresh-shell old/new param paths + override pack match recorded evidence"
+          ]
+        }
+      }
     }
   }
 }
